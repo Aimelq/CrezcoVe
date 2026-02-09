@@ -1,0 +1,218 @@
+{
+    "name": "2. Reporte Diario de Cierre",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 21 * * *"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-daily",
+            "name": "Todos los Días 21:00",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  COUNT(*) as total_ventas,\n  COALESCE(SUM(precio_total), 0) as total_ventas_monto,\n  COALESCE(SUM(costo_total), 0) as total_costo,\n  COALESCE(SUM(precio_total - costo_total), 0) as ganancia_neta\nFROM movimientos_inventario\nWHERE tipo_movimiento = 'VENTA'\n  AND DATE(fecha_movimiento) = CURRENT_DATE"
+            },
+            "id": "query-ventas",
+            "name": "Consultar Ventas del Día",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT COUNT(*) as productos_criticos\nFROM productos\nWHERE esta_activo = true\n  AND cantidad_actual <= stock_minimo"
+            },
+            "id": "query-criticos",
+            "name": "Consultar Productos Críticos",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                450,
+                450
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT COUNT(*) as alertas_activas\nFROM alertas\nWHERE esta_resuelta = false\n  AND esta_activo = true"
+            },
+            "id": "query-alertas",
+            "name": "Consultar Alertas Activas",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                450,
+                600
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "mode": "combine",
+                "combinationMode": "mergeByPosition"
+            },
+            "id": "merge-data",
+            "name": "Combinar Datos",
+            "type": "n8n-nodes-base.merge",
+            "typeVersion": 2,
+            "position": [
+                650,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const ventas = $input.first().json;\nconst criticos = $input.all()[1].json;\nconst alertas = $input.all()[2].json;\n\nconst totalVentas = parseFloat(ventas.total_ventas_monto || 0);\nconst totalCosto = parseFloat(ventas.total_costo || 0);\nconst ganancia = parseFloat(ventas.ganancia_neta || 0);\nconst margen = totalVentas > 0 ? ((ganancia / totalVentas) * 100).toFixed(1) : 0;\n\nconst fecha = new Date().toLocaleDateString('es-DO', {\n  weekday: 'long',\n  year: 'numeric',\n  month: 'long',\n  day: 'numeric'\n});\n\nlet mensaje = `📊 *Reporte Diario de Cierre*\\n`;\nmensaje += `📅 ${fecha}\\n\\n`;\n\nmensaje += `*💰 VENTAS DEL DÍA*\\n`;\nmensaje += `Total Ventas: $${totalVentas.toFixed(2)}\\n`;\nmensaje += `Costo Total: $${totalCosto.toFixed(2)}\\n`;\nmensaje += `Ganancia Neta: $${ganancia.toFixed(2)}\\n`;\nmensaje += `Margen: ${margen}%\\n`;\nmensaje += `Cantidad de Ventas: ${ventas.total_ventas}\\n\\n`;\n\nif (ventas.total_ventas > 0) {\n  const promedio = totalVentas / ventas.total_ventas;\n  mensaje += `Promedio por Venta: $${promedio.toFixed(2)}\\n\\n`;\n}\n\nmensaje += `*📦 INVENTARIO*\\n`;\nmensaje += `Productos Críticos: ${criticos.productos_criticos} 🔴\\n`;\nmensaje += `Alertas Activas: ${alertas.alertas_activas} 🔔\\n\\n`;\n\nif (criticos.productos_criticos > 0) {\n  mensaje += `⚠️ *Atención:* Hay productos que requieren reposición urgente.\\n`;\n}\n\nmensaje += `\\n_Reporte generado automáticamente_`;\n\nreturn {\n  json: {\n    mensaje: mensaje,\n    datos: {\n      ventas: ventas,\n      criticos: criticos.productos_criticos,\n      alertas: alertas.alertas_activas\n    }\n  }\n};"
+            },
+            "id": "format-report",
+            "name": "Formatear Reporte",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                850,
+                400
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $env.TELEGRAM_CHAT_ID_DUENO }}",
+                "text": "={{ $json.mensaje }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "send-telegram-report",
+            "name": "Enviar Reporte a Telegram",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                400
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "2",
+                    "name": "Telegram Bot"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Todos los Días 21:00": {
+            "main": [
+                [
+                    {
+                        "node": "Consultar Ventas del Día",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Consultar Productos Críticos",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Consultar Alertas Activas",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Consultar Ventas del Día": {
+            "main": [
+                [
+                    {
+                        "node": "Combinar Datos",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Consultar Productos Críticos": {
+            "main": [
+                [
+                    {
+                        "node": "Combinar Datos",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Consultar Alertas Activas": {
+            "main": [
+                [
+                    {
+                        "node": "Combinar Datos",
+                        "type": "main",
+                        "index": 1
+                    }
+                ]
+            ]
+        },
+        "Combinar Datos": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Reporte",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Reporte": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Reporte a Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "tags": []
+}

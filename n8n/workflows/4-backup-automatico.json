@@ -1,0 +1,156 @@
+{
+    "name": "4. Backup Automático Semanal",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 2 * * 0"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-backup",
+            "name": "Domingos 02:00",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "http://backend:5000/api/system/backup",
+                "authentication": "none",
+                "options": {}
+            },
+            "id": "create-backup-api",
+            "name": "Solicitar Backup Backend",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 3,
+            "position": [
+                450,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const data = $json;\nconst fecha = new Date().toLocaleDateString('es-DO', {\n  weekday: 'long',\n  year: 'numeric',\n  month: 'long',\n  day: 'numeric',\n  hour: '2-digit',\n  minute: '2-digit'\n});\n\nlet mensaje = `💾 *Backup Automático Completado*\\n\\n`;\nmensaje += `📅 Fecha: ${fecha}\\n`;\nmensaje += `📁 Archivo: \\`${data.archivo}\\`\\n`;\nmensaje += `✅ *Estado:* Backup creado exitosamente\\n\\n`;\nmensaje += `_Backup generado automáticamente_`;\n\nreturn {\n  json: {\n    mensaje: mensaje,\n    backup_file: data.archivo,\n    fecha: new Date().toISOString()\n  }\n};"
+            },
+            "id": "format-backup-message",
+            "name": "Formatear Mensaje de Confirmación",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $env.TELEGRAM_CHAT_ID_DUENO }}",
+                "text": "={{ $json.mensaje }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "send-backup-confirmation",
+            "name": "Enviar Confirmación a Telegram",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "2",
+                    "name": "Telegram Bot"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "respondWith": "text",
+                "responseBody": "={{ $json.mensaje }}",
+                "options": {}
+            },
+            "id": "error-handler",
+            "name": "Manejar Error",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                450,
+                500
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $env.TELEGRAM_CHAT_ID_DUENO }}",
+                "text": "=❌ *Error en Backup Automático*\\n\\nOcurrió un error al crear el backup de la base de datos.\\n\\nError: {{ $json.error ? $json.error : 'Error desconocido' }}\\n\\n⚠️ Revisar logs del sistema.",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "send-error-telegram",
+            "name": "Notificar Error",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                650,
+                500
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "2",
+                    "name": "Telegram Bot"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Domingos 02:00": {
+            "main": [
+                [
+                    {
+                        "node": "Solicitar Backup Backend",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Solicitar Backup Backend": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Mensaje de Confirmación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Mensaje de Confirmación": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Confirmación a Telegram",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {
+        "executionOrder": "v1",
+        "errorWorkflow": "error-handler"
+    },
+    "tags": []
+}

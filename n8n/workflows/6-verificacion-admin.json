@@ -1,0 +1,87 @@
+{
+    "name": "6. Verificación de Email Admin",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "admin-registration",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "webhook-trigger",
+            "name": "Webhook: Registro Admin",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "admin-registration"
+        },
+        {
+            "parameters": {
+                "fromEmail": "no-reply@tu-inventario.com",
+                "toEmail": "={{ $json.body.email }}",
+                "subject": "¡Activa tu cuenta de Inventario!",
+                "html": "=<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #eee; padding: 20px; border-radius: 10px;\">\n  <h2 style=\"color: #2563eb;\">Hola {{ $json.body.nombre }},</h2>\n  <p>Gracias por registrarte en el <strong>Sistema de Inventario Inteligente</strong>.</p>\n  <p>Para empezar a gestionar tu negocio, por favor confirma tu cuenta haciendo clic en el siguiente botón:</p>\n  <div style=\"text-align: center; margin: 30px 0;\">\n    <a href=\"{{ $json.body.link_verificacion }}\" style=\"background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;\">Verificar mi cuenta</a>\n  </div>\n  <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>\n  <p style=\"font-size: 12px; color: #666;\">{{ $json.body.link_verificacion }}</p>\n  <hr style=\"border: 0; border-top: 1px solid #eee; margin: 20px 0;\">\n  <p style=\"font-size: 12px; color: #999; text-align: center;\">Este es un correo automático, por favor no respondas.</p>\n</div>",
+                "options": {}
+            },
+            "id": "send-email",
+            "name": "Enviar Email Activación",
+            "type": "n8n-nodes-base.emailSend",
+            "typeVersion": 1,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "smtp": {
+                    "id": "your-smtp-id",
+                    "name": "SMTP Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "respondWith": "text",
+                "responseBody": "Email de activación enviado correctamente",
+                "options": {}
+            },
+            "id": "respond-ok",
+            "name": "Responder OK",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook: Registro Admin": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Email Activación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Enviar Email Activación": {
+            "main": [
+                [
+                    {
+                        "node": "Responder OK",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {},
+    "tags": []
+}

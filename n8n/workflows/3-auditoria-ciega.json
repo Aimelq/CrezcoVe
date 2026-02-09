@@ -1,0 +1,172 @@
+{
+    "name": "3. Auditoría Ciega Automática",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "cronExpression",
+                            "expression": "0 10 * * 1-5"
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-audit",
+            "name": "Lunes a Viernes 10:00",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  id,\n  nombre,\n  codigo_sku,\n  cantidad_actual,\n  unidad_medida\nFROM productos\nWHERE esta_activo = true\n  AND cantidad_actual > 0\nORDER BY RANDOM()\nLIMIT 3"
+            },
+            "id": "select-random-products",
+            "name": "Seleccionar Productos Aleatorios",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const productos = $input.all();\n\nconst fecha = new Date().toLocaleDateString('es-DO', {\n  weekday: 'long',\n  day: 'numeric',\n  month: 'long'\n});\n\nlet mensaje = `🔍 *Auditoría Ciega del Día*\\n`;\nmensaje += `📅 ${fecha}\\n\\n`;\nmensaje += `Por favor, realiza el conteo físico de los siguientes productos:\\n\\n`;\n\nproductos.forEach((item, index) => {\n  const p = item.json;\n  mensaje += `${index + 1}. *${p.nombre}*\\n`;\n  mensaje += `   SKU: \\`${p.codigo_sku}\\`\\n`;\n  mensaje += `   Unidad: ${p.unidad_medida}\\n\\n`;\n});\n\nmensaje += `📝 *Instrucciones:*\\n`;\nmensaje += `1. Cuenta físicamente cada producto\\n`;\nmensaje += `2. NO consultes el sistema antes de contar\\n`;\nmensaje += `3. Registra el conteo en el sistema\\n`;\nmensaje += `4. El sistema detectará discrepancias automáticamente\\n\\n`;\nmensaje += `⏰ Plazo: Hoy antes de las 18:00`;\n\nreturn {\n  json: {\n    mensaje: mensaje,\n    productos: productos.map(p => p.json),\n    fecha_auditoria: new Date().toISOString()\n  }\n};"
+            },
+            "id": "format-audit-message",
+            "name": "Formatear Mensaje de Auditoría",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $env.TELEGRAM_CHAT_ID_DUENO }}",
+                "text": "={{ $json.mensaje }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "send-audit-telegram",
+            "name": "Enviar Auditoría a Telegram",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "2",
+                    "name": "Telegram Bot"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const productos = $json.productos;\nconst results = [];\n\nproductos.forEach(producto => {\n  results.push({\n    json: {\n      tipo_alerta: 'AUDITORIA_PENDIENTE',\n      titulo: `Auditoría pendiente: ${producto.nombre}`,\n      mensaje: `Realizar conteo físico del producto ${producto.nombre} (${producto.codigo_sku})`,\n      prioridad: 'MEDIA',\n      metadata: JSON.stringify({\n        producto_id: producto.id,\n        fecha_programada: new Date().toISOString()\n      })\n    }\n  });\n});\n\nreturn results;"
+            },
+            "id": "prepare-audit-alerts",
+            "name": "Preparar Alertas de Auditoría",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                850,
+                450
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "insert",
+                "table": "alertas",
+                "columns": "tipo_alerta, titulo, mensaje, prioridad, metadata",
+                "returnFields": "*"
+            },
+            "id": "insert-audit-alerts",
+            "name": "Crear Alertas de Auditoría",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                1050,
+                450
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Lunes a Viernes 10:00": {
+            "main": [
+                [
+                    {
+                        "node": "Seleccionar Productos Aleatorios",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Seleccionar Productos Aleatorios": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Mensaje de Auditoría",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Mensaje de Auditoría": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Auditoría a Telegram",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Preparar Alertas de Auditoría",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Preparar Alertas de Auditoría": {
+            "main": [
+                [
+                    {
+                        "node": "Crear Alertas de Auditoría",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "tags": []
+}

@@ -1,0 +1,11 @@
+.env
+.env.local
+node_modules/
+__pycache__/
+*.pyc
+dist/
+build/
+uploads/*
+backups/*.sql
+backups/*.sql.gz
+n8n/data/

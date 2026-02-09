@@ -1,0 +1,41 @@
+# Dependencias base para producción
+Flask==3.0.0
+Flask-RESTX==1.3.0
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.0.5
+Flask-JWT-Extended==4.6.0
+Flask-CORS==4.0.0
+Flask-Marshmallow==1.2.0
+marshmallow==3.20.1
+marshmallow-sqlalchemy==0.29.0
+
+# Base de datos
+SQLAlchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
+# Redis y Celery
+redis==5.0.1
+celery==5.3.4
+
+# Utilidades
+python-dotenv==1.0.0
+gunicorn==21.2.0
+python-dateutil==2.8.2
+pytz==2023.3
+
+# Telegram Bot
+python-telegram-bot==20.7
+
+# Validación y seguridad
+email-validator==2.1.0
+bcrypt==4.1.2
+pydantic==2.5.3
+
+# Excel/PDF
+openpyxl==3.1.2
+pandas==2.1.4
+reportlab==4.0.7
+
+# HTTP requests
+requests==2.31.0

@@ -1,0 +1,235 @@
+{
+    "name": "1. Alerta de Stock Bajo",
+    "nodes": [
+        {
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "hours",
+                            "hoursInterval": 1
+                        }
+                    ]
+                }
+            },
+            "id": "schedule-trigger",
+            "name": "Cada Hora",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "SELECT \n  p.id,\n  p.nombre,\n  p.codigo_sku,\n  p.cantidad_actual,\n  p.stock_minimo,\n  p.unidad_medida,\n  p.alerta_stock_bajo_notificada\nFROM productos p\nWHERE p.esta_activo = true\n  AND p.cantidad_actual <= p.stock_minimo\n  AND (p.alerta_stock_bajo_notificada = false OR p.alerta_stock_bajo_notificada IS NULL)\nORDER BY (p.cantidad_actual / NULLIF(p.stock_minimo, 0)) ASC\nLIMIT 10"
+            },
+            "id": "postgres-query",
+            "name": "Consultar Productos con Stock Bajo",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "number": [
+                        {
+                            "value1": "={{ $json.length }}",
+                            "operation": "larger",
+                            "value2": 0
+                        }
+                    ]
+                }
+            },
+            "id": "if-has-products",
+            "name": "¿Hay Productos?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const productos = $input.all();\n\nlet mensaje = '⚠️ *ALERTA: Stock Bajo*\\n\\n';\nmensaje += `Se detectaron ${productos.length} producto(s) con stock bajo:\\n\\n`;\n\nproductos.forEach((item, index) => {\n  const producto = item.json;\n  const porcentaje = ((producto.cantidad_actual / producto.stock_minimo) * 100).toFixed(0);\n  \n  mensaje += `${index + 1}. *${producto.nombre}*\\n`;\n  mensaje += `   SKU: \\`${producto.codigo_sku}\\`\\n`;\n  mensaje += `   Stock: ${producto.cantidad_actual}/${producto.stock_minimo} ${producto.unidad_medida}\\n`;\n  mensaje += `   Nivel: ${porcentaje}% 🔴\\n\\n`;\n});\n\nmensaje += '🔔 *Acción requerida:* Realizar pedido de reposición.';\n\nreturn {\n  json: {\n    mensaje: mensaje,\n    productos: productos.map(p => p.json)\n  }\n};"
+            },
+            "id": "format-message",
+            "name": "Formatear Mensaje",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                850,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $env.TELEGRAM_CHAT_ID_DUENO }}",
+                "text": "={{ $json.mensaje }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "send-telegram",
+            "name": "Enviar a Telegram",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                200
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "2",
+                    "name": "Telegram Bot"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const productos = $json.productos;\nconst results = [];\n\nproductos.forEach(producto => {\n  results.push({\n    json: {\n      producto_id: producto.id,\n      tipo_alerta: 'STOCK_BAJO',\n      titulo: `Stock bajo: ${producto.nombre}`,\n      mensaje: `El producto ${producto.nombre} (${producto.codigo_sku}) tiene stock bajo: ${producto.cantidad_actual}/${producto.stock_minimo} ${producto.unidad_medida}`,\n      prioridad: 'ALTA'\n    }\n  });\n});\n\nreturn results;"
+            },
+            "id": "prepare-alerts",
+            "name": "Preparar Alertas",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1050,
+                350
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "insert",
+                "table": "alertas",
+                "columns": "producto_id, tipo_alerta, titulo, mensaje, prioridad",
+                "returnFields": "*"
+            },
+            "id": "insert-alerts",
+            "name": "Crear Alertas en BD",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                1250,
+                350
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "UPDATE productos\nSET alerta_stock_bajo_notificada = true\nWHERE id IN ({{ $json.productos.map(p => p.id).join(',') }})"
+            },
+            "id": "update-notified",
+            "name": "Marcar como Notificado",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                1250,
+                200
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Cada Hora": {
+            "main": [
+                [
+                    {
+                        "node": "Consultar Productos con Stock Bajo",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Consultar Productos con Stock Bajo": {
+            "main": [
+                [
+                    {
+                        "node": "¿Hay Productos?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "¿Hay Productos?": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Mensaje",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Mensaje": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar a Telegram",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Preparar Alertas",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Enviar a Telegram": {
+            "main": [
+                [
+                    {
+                        "node": "Marcar como Notificado",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Preparar Alertas": {
+            "main": [
+                [
+                    {
+                        "node": "Crear Alertas en BD",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "tags": []
+}

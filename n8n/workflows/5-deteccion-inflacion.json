@@ -1,0 +1,248 @@
+{
+    "name": "5. Detección de Inflación",
+    "nodes": [
+        {
+            "parameters": {
+                "path": "compra-registrada",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "webhook-trigger",
+            "name": "Webhook: Compra Registrada",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [
+                250,
+                300
+            ],
+            "webhookId": "compra-registrada"
+        },
+        {
+            "parameters": {
+                "operation": "executeQuery",
+                "query": "=SELECT \n  p.id,\n  p.nombre,\n  p.codigo_sku,\n  p.costo_promedio as costo_anterior,\n  p.precio_venta,\n  p.margen_deseado\nFROM productos p\nWHERE p.id = {{ $json.body.producto_id }}"
+            },
+            "id": "get-product-data",
+            "name": "Obtener Datos del Producto",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                450,
+                300
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "functionCode": "const producto = $input.first().json;\nconst compra = $input.all()[0].json.body;\n\nconst costoAnterior = parseFloat(producto.costo_anterior || 0);\nconst costoNuevo = parseFloat(compra.costo_unitario);\nconst precioActual = parseFloat(producto.precio_venta);\nconst margenDeseado = parseFloat(producto.margen_deseado || 30);\n\n// Calcular variación de costo\nconst variacionPorcentaje = costoAnterior > 0 \n  ? ((costoNuevo - costoAnterior) / costoAnterior) * 100 \n  : 0;\n\n// Calcular nuevo precio sugerido\nconst precioSugerido = costoNuevo * (1 + (margenDeseado / 100));\n\n// Calcular margen actual con nuevo costo\nconst margenActual = precioActual > 0\n  ? ((precioActual - costoNuevo) / precioActual) * 100\n  : 0;\n\nconst hayInflacion = variacionPorcentaje >= 5;\nconst requiereAjuste = margenActual < (margenDeseado - 5);\n\nreturn {\n  json: {\n    producto_id: producto.id,\n    producto_nombre: producto.nombre,\n    codigo_sku: producto.codigo_sku,\n    costo_anterior: costoAnterior,\n    costo_nuevo: costoNuevo,\n    variacion_porcentaje: variacionPorcentaje.toFixed(2),\n    precio_actual: precioActual,\n    precio_sugerido: precioSugerido.toFixed(2),\n    margen_actual: margenActual.toFixed(2),\n    margen_deseado: margenDeseado,\n    hay_inflacion: hayInflacion,\n    requiere_ajuste: requiereAjuste\n  }\n};"
+            },
+            "id": "calculate-inflation",
+            "name": "Calcular Inflación y Precio Sugerido",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                650,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "boolean": [
+                        {
+                            "value1": "={{ $json.hay_inflacion }}",
+                            "value2": true
+                        }
+                    ]
+                }
+            },
+            "id": "check-inflation",
+            "name": "¿Hay Inflación?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 1,
+            "position": [
+                850,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "functionCode": "const data = $json;\n\nconst emoji = data.variacion_porcentaje >= 10 ? '🔴' : '🟠';\n\nlet mensaje = `${emoji} *Inflación Detectada*\\n\\n`;\nmensaje += `Producto: *${data.producto_nombre}*\\n`;\nmensaje += `SKU: \\`${data.codigo_sku}\\`\\n\\n`;\n\nmensaje += `*📊 Análisis de Costos:*\\n`;\nmensaje += `Costo Anterior: $${parseFloat(data.costo_anterior).toFixed(2)}\\n`;\nmensaje += `Costo Nuevo: $${parseFloat(data.costo_nuevo).toFixed(2)}\\n`;\nmensaje += `Variación: +${data.variacion_porcentaje}% ${data.variacion_porcentaje >= 10 ? '🔴' : '🟡'}\\n\\n`;\n\nmensaje += `*💰 Análisis de Precios:*\\n`;\nmensaje += `Precio Actual: $${parseFloat(data.precio_actual).toFixed(2)}\\n`;\nmensaje += `Margen Actual: ${data.margen_actual}%\\n`;\nmensaje += `Margen Deseado: ${data.margen_deseado}%\\n\\n`;\n\nif (data.requiere_ajuste) {\n  mensaje += `⚠️ *Acción Requerida:*\\n`;\n  mensaje += `El margen actual está por debajo del deseado.\\n\\n`;\n  mensaje += `💡 *Precio Sugerido:* $${data.precio_sugerido}\\n`;\n  mensaje += `Esto mantendría el margen deseado del ${data.margen_deseado}%\\n`;\n} else {\n  mensaje += `✅ El margen actual es aceptable.\\n`;\n  mensaje += `💡 *Precio Sugerido (opcional):* $${data.precio_sugerido}\\n`;\n}\n\nreturn {\n  json: {\n    mensaje: mensaje,\n    data: data\n  }\n};"
+            },
+            "id": "format-inflation-message",
+            "name": "Formatear Mensaje de Inflación",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1050,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "chatId": "={{ $env.TELEGRAM_CHAT_ID_DUENO }}",
+                "text": "={{ $json.mensaje }}",
+                "additionalFields": {
+                    "parse_mode": "Markdown"
+                }
+            },
+            "id": "send-inflation-telegram",
+            "name": "Enviar Alerta de Inflación",
+            "type": "n8n-nodes-base.telegram",
+            "typeVersion": 1,
+            "position": [
+                1250,
+                200
+            ],
+            "credentials": {
+                "telegramApi": {
+                    "id": "2",
+                    "name": "Telegram Bot"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "operation": "insert",
+                "table": "alertas",
+                "columns": "producto_id, tipo_alerta, titulo, mensaje, prioridad, metadata",
+                "returnFields": "*"
+            },
+            "id": "create-inflation-alert",
+            "name": "Crear Alerta de Inflación",
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2,
+            "position": [
+                1250,
+                350
+            ],
+            "credentials": {
+                "postgres": {
+                    "id": "1",
+                    "name": "PostgreSQL - Inventario"
+                }
+            },
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ { \"success\": true, \"mensaje\": \"Inflación detectada y notificada\", \"data\": $json.data } }}",
+                "options": {}
+            },
+            "id": "respond-success",
+            "name": "Responder Éxito",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                1450,
+                200
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ { \"success\": true, \"mensaje\": \"Sin inflación significativa\" } }}",
+                "options": {}
+            },
+            "id": "respond-no-inflation",
+            "name": "Responder Sin Inflación",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [
+                1050,
+                400
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook: Compra Registrada": {
+            "main": [
+                [
+                    {
+                        "node": "Obtener Datos del Producto",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Obtener Datos del Producto": {
+            "main": [
+                [
+                    {
+                        "node": "Calcular Inflación y Precio Sugerido",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Calcular Inflación y Precio Sugerido": {
+            "main": [
+                [
+                    {
+                        "node": "¿Hay Inflación?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "¿Hay Inflación?": {
+            "main": [
+                [
+                    {
+                        "node": "Formatear Mensaje de Inflación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Responder Sin Inflación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Formatear Mensaje de Inflación": {
+            "main": [
+                [
+                    {
+                        "node": "Enviar Alerta de Inflación",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Crear Alerta de Inflación",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Enviar Alerta de Inflación": {
+            "main": [
+                [
+                    {
+                        "node": "Responder Éxito",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "active": true,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "tags": []
+}
