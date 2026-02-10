@@ -62,6 +62,7 @@ services:
       TELEGRAM_CHAT_ID_EMPLEADOS: ${TELEGRAM_CHAT_ID_EMPLEADOS}
       PYTHONDONTWRITEBYTECODE: 1
       PYTHONUNBUFFERED: 1
+      TZ: America/Caracas
     volumes:
       - ./backend:/app
       - ./uploads:/app/uploads
@@ -90,6 +91,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID_DUENO: ${TELEGRAM_CHAT_ID_DUENO}
       TELEGRAM_CHAT_ID_EMPLEADOS: ${TELEGRAM_CHAT_ID_EMPLEADOS}
+      TZ: America/Caracas
     volumes:
       - ./backend:/app
     depends_on:
@@ -109,6 +111,7 @@ services:
     environment:
       DATABASE_URL: postgresql://usuario_inventario:${DB_PASSWORD}@postgres:5432/inventario_db
       REDIS_URL: redis://redis:6379/0
+      TZ: America/Caracas
     volumes:
       - ./backend:/app
     depends_on:
@@ -176,6 +179,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID_DUENO: ${TELEGRAM_CHAT_ID_DUENO}
       TELEGRAM_CHAT_IDS_EMPLEADOS: ${TELEGRAM_CHAT_ID_EMPLEADOS}
+      TZ: America/Caracas
     volumes:
       - ./backend:/app
     depends_on:

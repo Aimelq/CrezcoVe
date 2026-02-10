@@ -38,6 +38,10 @@ export interface Producto {
     esta_activo: boolean;
     creado_en: string;
     actualizado_en: string;
+    // Fraccionamiento
+    producto_padre_id?: number;
+    factor_conversion?: number;
+    padre?: Producto;
     // Propiedades calculadas
     esta_bajo_stock: boolean;
     margen_actual: number;

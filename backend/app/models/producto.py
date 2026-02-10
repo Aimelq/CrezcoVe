@@ -27,8 +27,8 @@ class Producto(ModeloBase):
     umbral_alerta = db.Column(db.Float, nullable=True)  # Punto de reorden
     
     # Costos y precios
-    costo_promedio = db.Column(db.Numeric(10, 2), nullable=False, default=0.0)
-    ultimo_costo_compra = db.Column(db.Numeric(10, 2), nullable=True)
+    costo_promedio = db.Column(db.Numeric(18, 6), nullable=False, default=0.0)
+    ultimo_costo_compra = db.Column(db.Numeric(18, 6), nullable=True)
     precio_venta = db.Column(db.Numeric(10, 2), nullable=False, default=0.0)
     margen_deseado = db.Column(db.Float, nullable=False, default=30.0)  # Porcentaje
     
@@ -39,6 +39,10 @@ class Producto(ModeloBase):
     # Alertas
     alerta_stock_bajo_notificada = db.Column(db.Boolean, nullable=False, default=False)
     
+    # Fraccionamiento (Multi-unidades)
+    producto_padre_id = db.Column(db.Integer, db.ForeignKey('productos.id'), nullable=True)
+    factor_conversion = db.Column(db.Float, nullable=True, default=1.0) # Cuántos hijos salen de 1 padre
+    
     # Información adicional
     imagen_url = db.Column(db.String(255), nullable=True)
     notas = db.Column(db.Text, nullable=True)
@@ -48,6 +52,9 @@ class Producto(ModeloBase):
     movimientos = db.relationship('MovimientoInventario', backref='producto', lazy='dynamic')
     lotes = db.relationship('LoteProducto', backref='producto', lazy='dynamic')
     alertas = db.relationship('Alerta', backref='producto', lazy='dynamic')
+    
+    # Relación jerárquica para fraccionamiento
+    hijos = db.relationship('Producto', backref=db.backref('padre', remote_side='Producto.id'), lazy='dynamic')
     
     @property
     def esta_bajo_stock(self):
@@ -78,8 +85,15 @@ class Producto(ModeloBase):
         return data
     
     def soft_delete(self):
-        """Sobrescribe soft_delete para desactivar también los lotes asociados."""
+        """Sobrescribe soft_delete para desactivar también los lotes asociados y liberar el SKU."""
+        import time
         self.esta_activo = False
+        
+        # Liberar el SKU renombrándolo con sufijo de timestamp
+        # Ejemplo: "COCA-COLA" -> "COCA-COLA_DEL_1712345678"
+        timestamp = int(time.time())
+        self.codigo_sku = f"{self.codigo_sku}_DEL_{timestamp}"
+        
         # Desactivar todos sus lotes para mantener coherencia en la DB
         for lote in self.lotes:
             lote.esta_activo = False

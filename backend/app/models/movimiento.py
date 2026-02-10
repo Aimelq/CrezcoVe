@@ -30,8 +30,8 @@ class MovimientoInventario(ModeloBase):
     cantidad_nueva = db.Column(db.Float, nullable=True)  # Stock después del movimiento
     
     # Costos (para compras y ajustes)
-    costo_unitario = db.Column(db.Numeric(10, 2), nullable=True)
-    costo_total = db.Column(db.Numeric(10, 2), nullable=True)
+    costo_unitario = db.Column(db.Numeric(18, 6), nullable=True)
+    costo_total = db.Column(db.Numeric(18, 6), nullable=True)
     
     # Precios (para ventas)
     precio_unitario = db.Column(db.Numeric(10, 2), nullable=True)

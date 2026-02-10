@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
-import { ArrowDown, ArrowUp, Settings, TrendingUp, Plus, Trash2, ShoppingCart, DollarSign, Info } from 'lucide-react'
+import { ArrowDown, ArrowUp, Settings, TrendingUp, Plus, Trash2, ShoppingCart, DollarSign, Info, Package } from 'lucide-react'
 import { useProductos } from '@/api/queries/productos.queries'
-import { useRegistrarIngreso, useRegistrarVentaMultiple, useRegistrarAjuste, useGetTasaCambio } from '@/api/queries/inventario.queries'
+import { useRegistrarIngreso, useRegistrarVentaMultiple, useRegistrarAjuste, useGetTasaCambio, useDesempacar } from '@/api/queries/inventario.queries'
 import { useProveedores } from '@/api/queries/proveedores.queries'
 import type { IngresoInventarioRequest, SalidaInventarioRequest, AjusteInventarioRequest, ItemVenta, VentaMultipleRequest } from '@/types/api.types'
 import SearchableSelect from '@/components/ui/SearchableSelect'
@@ -11,7 +11,7 @@ import SearchableSelect from '@/components/ui/SearchableSelect'
 type TipoOperacion = 'ingreso' | 'salida' | 'ajuste'
 
 export default function InventarioPage() {
-    const [tipoOperacion, setTipoOperacion] = useState<TipoOperacion>('ingreso')
+    const [tipoOperacion, setTipoOperacion] = useState<TipoOperacion | 'desempacar'>('ingreso')
 
     // Estado para venta múltiple (Carrito)
     const [carrito, setCarrito] = useState<ItemVenta[]>([])
@@ -25,10 +25,12 @@ export default function InventarioPage() {
     const registrarIngreso = useRegistrarIngreso()
     const registrarVentaMultiple = useRegistrarVentaMultiple()
     const registrarAjuste = useRegistrarAjuste()
+    const desempacar = useDesempacar()
 
     const { register: registerIngreso, handleSubmit: handleSubmitIngreso, reset: resetIngreso, setValue: setValueIngreso, watch: watchIngreso } = useForm<IngresoInventarioRequest>()
     const { register: registerSalida, reset: resetSalida, setValue: setValueSalida, watch: watchSalida } = useForm<SalidaInventarioRequest>()
     const { register: registerAjuste, handleSubmit: handleSubmitAjuste, reset: resetAjuste, setValue: setValueAjuste } = useForm<AjusteInventarioRequest>()
+    const { register: registerDesempacar, handleSubmit: handleSubmitDesempacar, reset: resetDesempacar, setValue: setValueDesempacar, watch: watchDesempacar } = useForm<{ producto_id: number; cantidad: number }>()
 
     const productoSeleccionadoId = watchIngreso('producto_id')
     const productoSeleccionado = useMemo(() => {
@@ -85,6 +87,12 @@ export default function InventarioPage() {
     const onSubmitAjuste = (data: AjusteInventarioRequest) => {
         registrarAjuste.mutate(data, {
             onSuccess: () => resetAjuste()
+        })
+    }
+
+    const onSubmitDesempacar = (data: { producto_id: number; cantidad: number }) => {
+        desempacar.mutate(data, {
+            onSuccess: () => resetDesempacar()
         })
     }
 
@@ -157,7 +165,7 @@ export default function InventarioPage() {
 
             {/* Selector de tipo de operación */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                     <button
                         onClick={() => setTipoOperacion('ingreso')}
                         className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${tipoOperacion === 'ingreso'
@@ -188,6 +196,16 @@ export default function InventarioPage() {
                         <Settings className="w-5 h-5" />
                         Ajuste
                     </button>
+                    <button
+                        onClick={() => setTipoOperacion('desempacar' as any)}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${tipoOperacion === ('desempacar' as any)
+                            ? 'bg-purple-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-50'
+                            }`}
+                    >
+                        <Package className="w-5 h-5" />
+                        Desempacar
+                    </button>
                 </div>
             </div>
 
@@ -199,6 +217,7 @@ export default function InventarioPage() {
                         {tipoOperacion === 'ingreso' && <><ArrowDown className="text-green-600" /> Registrar Compra</>}
                         {tipoOperacion === 'salida' && <><ArrowUp className="text-blue-600" /> Preparar Venta</>}
                         {tipoOperacion === 'ajuste' && <><Settings className="text-orange-600" /> Registrar Ajuste / Pérdida</>}
+                        {tipoOperacion === ('desempacar' as any) && <><Package className="text-purple-600" /> Desempacar Producto</>}
                     </h2>
 
                     {/* Formulario de Ingreso */}
@@ -425,120 +444,210 @@ export default function InventarioPage() {
                             </button>
                         </form>
                     )}
+
+                    {/* Formulario de Desempacar */}
+                    {tipoOperacion === 'desempacar' && (
+                        <form onSubmit={handleSubmitDesempacar(onSubmitDesempacar)} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Producto a Reponer (Detal) *
+                                </label>
+                                <SearchableSelect
+                                    options={opcionesProductos.filter(p => {
+                                        const prod = productosData?.items.find(x => x.id === p.id);
+                                        return !!prod?.producto_padre_id;
+                                    })}
+                                    placeholder="Selecciona producto que tiene caja/bulto..."
+                                    onSelect={(val) => {
+                                        setValueDesempacar('producto_id', val);
+                                    }}
+                                />
+                                <input type="hidden" {...registerDesempacar('producto_id', { required: true })} />
+                            </div>
+
+                            {(() => {
+                                const selId = watchDesempacar('producto_id');
+                                const prodHijo = productosData?.items.find(p => p.id === selId);
+                                const prodPadre = productosData?.items.find(p => p.id === prodHijo?.producto_padre_id);
+
+                                if (!prodHijo || !prodPadre) return null;
+
+                                return (
+                                    <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 space-y-3">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-purple-100 rounded-lg text-purple-600">
+                                                <Package className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-bold text-purple-700 uppercase">Se extraerá de:</p>
+                                                <p className="font-bold text-purple-900">{prodPadre.nombre}</p>
+                                                <p className="text-[10px] text-purple-600">Stock actual: {prodPadre.cantidad_actual} {prodPadre.unidad_medida}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="pt-3 border-t border-purple-200">
+                                            <label className="block text-sm font-medium text-purple-900 mb-2">
+                                                ¿Cuántas {prodPadre.unidad_medida}(s) vas a abrir?
+                                            </label>
+                                            <div className="flex items-center gap-3">
+                                                <input
+                                                    type="number"
+                                                    {...registerDesempacar('cantidad', { required: true, valueAsNumber: true, min: 1 })}
+                                                    className="w-24 px-4 py-2 bg-white border border-purple-200 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                                                    defaultValue={1}
+                                                />
+                                                <div className="text-sm font-medium text-purple-700">
+                                                    = <span className="font-bold text-lg">{(watchDesempacar('cantidad') || 1) * (prodHijo.factor_conversion || 1)}</span> {prodHijo.unidad_medida}(s) nuevas
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
+                            <button
+                                type="submit"
+                                disabled={desempacar.isPending || !watchDesempacar('producto_id')}
+                                className="w-full bg-purple-600 text-white py-3 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                <Plus className="w-5 h-5" />
+                                {desempacar.isPending ? 'Procesando...' : 'Confirmar Desempacado'}
+                            </button>
+                        </form>
+                    )}
                 </div>
 
                 {/* Carrito de Venta o Info */}
                 <div className="space-y-6">
-                    {tipoOperacion === 'salida' ? (
+                    {tipoOperacion === 'salida' && carrito.length > 0 ? (
                         <div className="bg-white rounded-xl shadow-lg border-2 border-blue-100 flex flex-col h-full overflow-hidden">
                             <div className="p-4 bg-blue-50 border-b border-blue-100 flex items-center justify-between">
                                 <h3 className="font-bold text-blue-900 flex items-center gap-2">
                                     <ShoppingCart className="w-5 h-5" />
                                     Detalle de la Venta ({carrito.length})
                                 </h3>
-                                {carrito.length > 0 && (
-                                    <button
-                                        onClick={() => setCarrito([])}
-                                        className="text-xs text-red-600 font-semibold hover:underline"
-                                    >
-                                        Limpiar Todo
-                                    </button>
-                                )}
+                                <button
+                                    onClick={() => setCarrito([])}
+                                    className="text-xs text-red-600 font-semibold hover:underline"
+                                >
+                                    Limpiar Todo
+                                </button>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[300px] max-h-[500px]">
-                                {carrito.length === 0 ? (
-                                    <div className="h-full flex flex-col items-center justify-center text-gray-400 py-10">
-                                        <ShoppingCart className="w-12 h-12 mb-2 opacity-20" />
-                                        <p>Agrega productos para registrar una venta</p>
-                                    </div>
-                                ) : (
-                                    carrito.map((item, idx) => {
-                                        const p = productosData?.items.find(x => x.id === item.producto_id)
-                                        return (
-                                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                                                <div>
-                                                    <p className="font-semibold text-gray-900">{p?.nombre}</p>
-                                                    <p className="text-xs text-gray-500">
-                                                        {item.cantidad} x ${item.precio_unitario.toFixed(2)}
-                                                    </p>
-                                                </div>
-                                                <div className="flex items-center gap-4">
-                                                    <p className="font-bold text-gray-900">
-                                                        ${(item.cantidad * item.precio_unitario).toFixed(2)}
-                                                    </p>
-                                                    <button onClick={() => eliminarDelCarrito(idx)} className="text-red-400 hover:text-red-600">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
-                                                </div>
+                                {carrito.map((item, idx) => {
+                                    const p = productosData?.items.find(x => x.id === item.producto_id)
+                                    return (
+                                        <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div>
+                                                <p className="font-semibold text-gray-900">{p?.nombre}</p>
+                                                <p className="text-xs text-gray-500">
+                                                    {item.cantidad} x ${item.precio_unitario.toFixed(2)}
+                                                </p>
                                             </div>
-                                        )
-                                    })
-                                )}
+                                            <div className="flex items-center gap-4">
+                                                <p className="font-bold text-gray-900">
+                                                    ${(item.cantidad * item.precio_unitario).toFixed(2)}
+                                                </p>
+                                                <button onClick={() => eliminarDelCarrito(idx)} className="text-red-400 hover:text-red-600">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
                             </div>
 
-                            {carrito.length > 0 && (
-                                <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-4">
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <input
-                                            placeholder="Nro Factura"
-                                            value={referenciaVenta}
-                                            onChange={(e) => setReferenciaVenta(e.target.value)}
-                                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none"
-                                        />
-                                        <input
-                                            placeholder="Notas..."
-                                            value={notasVenta}
-                                            onChange={(e) => setNotasVenta(e.target.value)}
-                                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none"
-                                        />
-                                    </div>
-
-                                    <div className="pt-2 border-t border-gray-200">
-                                        <div className="flex justify-between items-center mb-1">
-                                            <span className="text-gray-600 font-medium">Total USD:</span>
-                                            <span className="text-xl font-black text-gray-900">${totalVentaUsd.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-blue-700">
-                                            <span className="font-medium">Total Bolívares (Bs.):</span>
-                                            <span className="text-2xl font-black">{totalVentaBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.</span>
-                                        </div>
-                                    </div>
-
-                                    <button
-                                        onClick={onSubmitVentaMultiple}
-                                        disabled={registrarVentaMultiple.isPending}
-                                        className="w-full bg-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-800 transition-all shadow-lg flex items-center justify-center gap-2"
-                                    >
-                                        <TrendingUp className="w-6 h-6" />
-                                        {registrarVentaMultiple.isPending ? 'Procesando...' : 'Finalizar Venta'}
-                                    </button>
+                            <div className="p-4 bg-gray-50 border-t border-gray-200 space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <input
+                                        placeholder="Nro Factura"
+                                        value={referenciaVenta}
+                                        onChange={(e) => setReferenciaVenta(e.target.value)}
+                                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none"
+                                    />
+                                    <input
+                                        placeholder="Notas..."
+                                        value={notasVenta}
+                                        onChange={(e) => setNotasVenta(e.target.value)}
+                                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg outline-none"
+                                    />
                                 </div>
-                            )}
+
+                                <div className="pt-2 border-t border-gray-200">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-gray-600 font-medium">Total USD:</span>
+                                        <span className="text-xl font-black text-gray-900">${totalVentaUsd.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-blue-700">
+                                        <span className="font-medium">Total Bolívares (Bs.):</span>
+                                        <span className="text-2xl font-black">{totalVentaBs.toLocaleString('es-VE', { minimumFractionDigits: 2 })} Bs.</span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    onClick={onSubmitVentaMultiple}
+                                    disabled={registrarVentaMultiple.isPending}
+                                    className="w-full bg-blue-700 text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-800 transition-all shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    <TrendingUp className="w-6 h-6" />
+                                    {registrarVentaMultiple.isPending ? 'Procesando...' : 'Finalizar Venta'}
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="space-y-6">
-                            <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-sm border border-green-200 p-6">
-                                <h3 className="text-lg font-semibold text-green-900 mb-3">
-                                    💡 Ingreso (Compra)
-                                </h3>
-                                <ul className="text-sm text-green-800 space-y-2">
-                                    <li>• Registra la compra de mercancía de proveedores</li>
-                                    <li>• El sistema calcula automáticamente el nuevo costo promedio</li>
-                                    <li>• Se analiza si el precio de venta actual sigue siendo rentable</li>
-                                </ul>
-                            </div>
+                            {tipoOperacion === 'ingreso' && (
+                                <div className="bg-gradient-to-br from-green-50 to-green-100 rounded-xl shadow-sm border border-green-200 p-6">
+                                    <h3 className="text-lg font-semibold text-green-900 mb-3">
+                                        💡 Ingreso (Compra)
+                                    </h3>
+                                    <ul className="text-sm text-green-800 space-y-2">
+                                        <li>• Registra la compra de mercancía de proveedores</li>
+                                        <li>• El sistema calcula automáticamente el nuevo costo promedio</li>
+                                        <li>• Se analiza si el precio de venta actual sigue siendo rentable</li>
+                                    </ul>
+                                </div>
+                            )}
 
-                            <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl shadow-sm border border-orange-200 p-6">
-                                <h3 className="text-lg font-semibold text-orange-900 mb-3">
-                                    ⚙️ Ajustes de Inventario
-                                </h3>
-                                <ul className="text-sm text-orange-800 space-y-2">
-                                    <li>• Usa esto para pérdidas, daños o errores de conteo</li>
-                                    <li>• Cantidad negativa para pérdidas, positiva para hallazgos</li>
-                                    <li>• Es obligatorio especificar un motivo válido</li>
-                                </ul>
-                            </div>
+                            {tipoOperacion === 'salida' && (
+                                <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl shadow-sm border border-blue-200 p-6">
+                                    <h3 className="text-lg font-semibold text-blue-900 mb-3">
+                                        📈 Salida (Venta)
+                                    </h3>
+                                    <ul className="text-sm text-blue-800 space-y-2">
+                                        <li>• Agrega productos al carrito para crear una venta múltiple</li>
+                                        <li>• El inventario se descuenta automáticamente</li>
+                                        <li>• Se registra la ganancia basada en la diferencia precio-costo</li>
+                                    </ul>
+                                </div>
+                            )}
+
+                            {tipoOperacion === 'ajuste' && (
+                                <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl shadow-sm border border-orange-200 p-6">
+                                    <h3 className="text-lg font-semibold text-orange-900 mb-3">
+                                        ⚙️ Ajuste de Inventario
+                                    </h3>
+                                    <ul className="text-sm text-orange-800 space-y-2">
+                                        <li>• Corrige diferencias entre el sistema y la realidad física</li>
+                                        <li>• Usa cantidades negativas (-) para mermas o robos</li>
+                                        <li>• Usa cantidades positivas (+) para ingresos sin costo (regalos, etc)</li>
+                                    </ul>
+                                </div>
+                            )}
+
+                            {tipoOperacion === ('desempacar' as any) && (
+                                <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl shadow-sm border border-purple-200 p-6">
+                                    <h3 className="text-lg font-semibold text-purple-900 mb-3">
+                                        📦 Fraccionamiento
+                                    </h3>
+                                    <ul className="text-sm text-purple-800 space-y-2">
+                                        <li>• Convierte bultos/cajas en unidades individuales</li>
+                                        <li>• El sistema resta 1 del bulto y suma N al detal</li>
+                                        <li>• Ideal para lápices, cigarrillos, refrescos, etc.</li>
+                                    </ul>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

@@ -181,7 +181,7 @@ class IngresoInventario(Resource):
             costo_total=datos['cantidad'] * datos['costo_unitario'],
             referencia_id=datos.get('referencia_id'),
             notas=datos.get('notas'),
-            fecha_movimiento=datetime.utcnow()
+                fecha_movimiento=datetime.now()
         )
         
         db.session.add(movimiento)
@@ -257,7 +257,7 @@ class SalidaInventario(Resource):
             precio_total=ganancia_info['ingreso_total'],
             referencia_id=datos.get('referencia_id'),
             notas=datos.get('notas'),
-            fecha_movimiento=datetime.utcnow()
+                fecha_movimiento=datetime.now()
         )
         
         db.session.add(movimiento)
@@ -399,7 +399,7 @@ class AjusteInventario(Resource):
             costo_unitario=producto.costo_promedio,
             costo_total=abs(datos['cantidad']) * float(producto.costo_promedio),
             notas=datos.get('notas'),
-            fecha_movimiento=datetime.utcnow()
+                fecha_movimiento=datetime.now()
         )
         
         db.session.add(movimiento)
@@ -519,3 +519,93 @@ class GestionTasaCambio(Resource):
             'mensaje': 'Tasa de cambio actualizada manualmente',
             'nueva_tasa': TasaCambioServicio.get_info_tasa()
         }
+@inventario_ns.route('/desempacar')
+class DesempacarInventario(Resource):
+    @jwt_required()
+    def post(self):
+        """
+        Operación de fraccionamiento: Desempaca 1 unidad de un producto 'Padre' (caja)
+        y la convierte en N unidades del producto 'Hijo' (unidad individual).
+        """
+        datos = request.get_json()
+        usuario_id = int(get_jwt_identity())
+        producto_hijo_id = datos.get('producto_id')
+        cantidad_a_desempacar = datos.get('cantidad', 1) # Por defecto 1 caja
+        
+        producto_hijo = Producto.query.get(producto_hijo_id)
+        if not producto_hijo:
+            inventario_ns.abort(404, 'Producto no encontrado')
+            
+        if not producto_hijo.padre:
+            inventario_ns.abort(400, 'Este producto no tiene un producto padre configurado para fraccionamiento')
+            
+        producto_padre = producto_hijo.padre
+        factor = producto_hijo.factor_conversion or 1.0
+        
+        # Validar stock del padre
+        if producto_padre.cantidad_actual < cantidad_a_desempacar:
+            inventario_ns.abort(400, f'Stock insuficiente de {producto_padre.nombre}. Disponible: {producto_padre.cantidad_actual} {producto_padre.unidad_medida}')
+            
+        try:
+            # 1. Restar del padre (Salida por fraccionamiento)
+            cant_anterior_padre = producto_padre.cantidad_actual
+            producto_padre.cantidad_actual -= cantidad_a_desempacar
+            
+            mov_padre = MovimientoInventario(
+                producto_id=producto_padre.id,
+                usuario_id=usuario_id,
+                tipo_movimiento='AJUSTE',
+                motivo_ajuste='FRACCIONAMIENTO_SALIDA',
+                cantidad=-cantidad_a_desempacar,
+                cantidad_anterior=cant_anterior_padre,
+                cantidad_nueva=producto_padre.cantidad_actual,
+                costo_unitario=producto_padre.costo_promedio,
+                costo_total=cantidad_a_desempacar * float(producto_padre.costo_promedio),
+                notas=f"Fraccionamiento: Convertido a {producto_hijo.nombre}",
+                    fecha_movimiento=datetime.now()
+            )
+            db.session.add(mov_padre)
+            
+            # 2. Sumar al hijo (Entrada por fraccionamiento)
+            cantidad_hijo_nueva = cantidad_a_desempacar * factor
+            cant_anterior_hijo = producto_hijo.cantidad_actual
+            producto_hijo.cantidad_actual += cantidad_hijo_nueva
+            
+            # El costo unitario del hijo se hereda del padre pro-rateado
+            costo_unitario_hijo = float(producto_padre.costo_promedio) / factor if factor > 0 else 0
+            producto_hijo.costo_promedio = costo_unitario_hijo
+            
+            mov_hijo = MovimientoInventario(
+                producto_id=producto_hijo.id,
+                usuario_id=usuario_id,
+                tipo_movimiento='AJUSTE',
+                motivo_ajuste='FRACCIONAMIENTO_ENTRADA',
+                cantidad=cantidad_hijo_nueva,
+                cantidad_anterior=cant_anterior_hijo,
+                cantidad_nueva=producto_hijo.cantidad_actual,
+                costo_unitario=costo_unitario_hijo,
+                costo_total=cantidad_hijo_nueva * costo_unitario_hijo,
+                notas=f"Fraccionamiento: Desempacado de {producto_padre.nombre}",
+                fecha_movimiento=datetime.utcnow()
+            )
+            db.session.add(mov_hijo)
+            
+            db.session.commit()
+            
+            # Auditoría
+            registrar_accion_auditoria(
+                accion='ACTUALIZAR',
+                tabla_afectada='productos',
+                registro_id=producto_hijo.id,
+                valores_nuevos={'operacion': 'fraccionamiento', 'padre_id': producto_padre.id, 'cantidad_desempacada': cantidad_a_desempacar}
+            )
+            
+            return {
+                'mensaje': 'Fraccionamiento completado exitosamente',
+                'producto_hijo': producto_hijo.to_dict(),
+                'producto_padre': producto_padre.to_dict()
+            }, 200
+            
+        except Exception as e:
+            db.session.rollback()
+            inventario_ns.abort(500, f"Error al procesar fraccionamiento: {str(e)}")

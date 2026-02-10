@@ -28,7 +28,7 @@ class Dashboard(Resource):
         productos_criticos = ServicioPrediccion.obtener_productos_criticos(limite=10)
         
         # Pérdidas del mes (anteriormente mermas)
-        fecha_inicio_mes = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        fecha_inicio_mes = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         perdidas_mes = db.session.query(func.sum(MovimientoInventario.costo_total)).filter(
             MovimientoInventario.tipo_movimiento.in_(['MERMA', 'AJUSTE']),
             MovimientoInventario.cantidad < 0,
@@ -36,7 +36,7 @@ class Dashboard(Resource):
         ).scalar() or 0
         
         # Ganancia del día
-        hoy_inicio = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        hoy_inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
         ventas_hoy = MovimientoInventario.query.filter(
             MovimientoInventario.tipo_movimiento == 'VENTA',
             MovimientoInventario.fecha_movimiento >= hoy_inicio
@@ -61,7 +61,7 @@ class Movimientos7Dias(Resource):
     @jwt_required()
     def get(self):
         """Obtiene movimientos de los últimos 7 días para gráfico."""
-        fecha_limite = datetime.utcnow() - timedelta(days=7)
+        fecha_limite = datetime.now() - timedelta(days=7)
         
         movimientos = MovimientoInventario.query.filter(
             MovimientoInventario.fecha_movimiento >= fecha_limite

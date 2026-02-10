@@ -150,7 +150,7 @@ export default function UsuariosPage() {
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium w-fit border">
                                             <Shield className="w-3 h-3" />
-                                            {u.rol}
+                                            {u.rol === 'DUENO' ? 'ADMINISTRADOR' : u.rol}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -162,16 +162,18 @@ export default function UsuariosPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleToggleStatus(u.id, u.esta_activo)}
-                                            className={cn(
-                                                "p-2 rounded-lg transition-colors",
-                                                u.esta_activo ? "text-red-600 hover:bg-red-50" : "text-green-600 hover:bg-green-50"
-                                            )}
-                                            title={u.esta_activo ? 'Desactivar' : 'Activar'}
-                                        >
-                                            <Trash2 className="w-5 h-5" />
-                                        </button>
+                                        {u.id !== 1 && u.rol !== 'DUENO' && (
+                                            <button
+                                                onClick={() => handleToggleStatus(u.id, u.esta_activo)}
+                                                className={cn(
+                                                    "p-2 rounded-lg transition-colors",
+                                                    u.esta_activo ? "text-red-600 hover:bg-red-50" : "text-green-600 hover:bg-green-50"
+                                                )}
+                                                title={u.esta_activo ? 'Desactivar' : 'Activar'}
+                                            >
+                                                <Trash2 className="w-5 h-5" />
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}

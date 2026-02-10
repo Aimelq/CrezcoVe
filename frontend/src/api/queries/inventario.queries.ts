@@ -100,3 +100,21 @@ export const useGetTasaCambio = (actualizar = false) => {
         staleTime: 1000 * 60 * 60, // 1 hora
     });
 };
+export const useDesempacar = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (data: { producto_id: number; cantidad: number }) => {
+            const response = await apiClient.post('/inventario/desempacar', data);
+            return response.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['productos'] });
+            queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+            toast.success('Fraccionamiento completado exitosamente');
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Error al desempacar producto');
+        }
+    });
+};

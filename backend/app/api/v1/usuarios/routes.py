@@ -93,8 +93,8 @@ class DetalleUsuario(Resource):
         if not usuario:
             usuarios_ns.abort(404, 'Usuario no encontrado')
             
-        if usuario.rol == 'DUENO':
-            usuarios_ns.abort(400, 'No se puede eliminar al administrador principal')
+        if usuario.id == 1 or usuario.rol == 'DUENO':
+            usuarios_ns.abort(400, 'No se puede eliminar al administrador principal del sistema')
             
         usuario.esta_activo = False
         db.session.commit()

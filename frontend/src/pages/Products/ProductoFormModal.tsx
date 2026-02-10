@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
-import { X, Loader2, Box, Calendar, DollarSign, Package } from 'lucide-react'
-import { useProducto, useCrearProducto, useActualizarProducto } from '@/api/queries/productos.queries'
+import { X, Loader2, Box, Calendar, Package } from 'lucide-react'
+import { useProducto, useCrearProducto, useActualizarProducto, useProductos } from '@/api/queries/productos.queries'
 import { useLotesProducto } from '@/api/queries/lotes.queries'
 import { format } from 'date-fns'
-import { es } from 'date-fns/locale'
+import SearchableSelect from '@/components/ui/SearchableSelect'
 import type { Producto } from '@/types/api.types'
 
 interface ProductoFormModalProps {
@@ -14,10 +14,11 @@ interface ProductoFormModalProps {
 
 export default function ProductoFormModal({ productoId, onClose }: ProductoFormModalProps) {
     const { data: producto, isLoading: cargandoProducto } = useProducto(productoId!)
+    const { data: todosProductos } = useProductos({ por_pagina: 1000 })
     const crearProducto = useCrearProducto()
     const actualizarProducto = useActualizarProducto()
 
-    const { register, handleSubmit, reset, formState: { errors } } = useForm<Partial<Producto>>()
+    const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm<Partial<Producto>>()
 
     useEffect(() => {
         if (producto) {
@@ -26,13 +27,36 @@ export default function ProductoFormModal({ productoId, onClose }: ProductoFormM
     }, [producto, reset])
 
     const onSubmit = (data: Partial<Producto>) => {
+        // Limpiar datos para evitar 400 Bad Request por campos numéricos vacíos o inválidos
+        const cleanData: any = { ...data };
+
+        // Lista de campos que deben ser numéricos o eliminados si están vacíos/NaN
+        const numericFields = [
+            'stock_minimo',
+            'stock_maximo',
+            'precio_venta',
+            'margen_deseado',
+            'factor_conversion',
+            'producto_padre_id'
+        ];
+
+        numericFields.forEach(field => {
+            const val = cleanData[field];
+            if (val === undefined || val === null || val === "" || (typeof val === 'number' && isNaN(val)) || val === "0" || val === 0) {
+                // Especial para producto_padre_id: 0 es un valor nulo de facto
+                delete cleanData[field];
+            } else {
+                cleanData[field] = Number(val);
+            }
+        });
+
         if (productoId) {
             actualizarProducto.mutate(
-                { id: productoId, data },
+                { id: productoId, data: cleanData },
                 { onSuccess: onClose }
             )
         } else {
-            crearProducto.mutate(data, { onSuccess: onClose })
+            crearProducto.mutate(cleanData, { onSuccess: onClose })
         }
     }
 
@@ -144,6 +168,53 @@ export default function ProductoFormModal({ productoId, onClose }: ProductoFormM
                                     <option value="LITRO">Litro</option>
                                     <option value="METRO">Metro</option>
                                 </select>
+                            </div>
+                        </div>
+
+                        {/* Fraccionamiento */}
+                        <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-4">
+                            <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2">
+                                <Package className="w-4 h-4" />
+                                Fraccionamiento (Multi-unidades)
+                            </h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-blue-700 mb-1 uppercase tracking-wider">
+                                        Producto Padre (Bulto/Caja)
+                                    </label>
+                                    <SearchableSelect
+                                        options={todosProductos?.items
+                                            .filter(p => p.id !== productoId)
+                                            .map(p => ({
+                                                id: p.id,
+                                                label: p.nombre,
+                                                subLabel: `SKU: ${p.codigo_sku} | Stock: ${p.cantidad_actual}`,
+                                                value: p.id
+                                            })) || []
+                                        }
+                                        placeholder="Buscar caja/bulto..."
+                                        onSelect={(val) => setValue('producto_padre_id', val)}
+                                    />
+                                    <input type="hidden" {...register('producto_padre_id')} />
+                                    <p className="text-[10px] text-blue-600 mt-1 italic">
+                                        Selecciona la caja de la cual proviene este producto individual
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-blue-700 mb-1 uppercase tracking-wider">
+                                        Factor de Conversión
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="1"
+                                        {...register('factor_conversion', { valueAsNumber: true })}
+                                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-primary outline-none transition-all text-sm"
+                                        placeholder="Ej: 12"
+                                    />
+                                    <p className="text-[10px] text-blue-600 mt-1 italic">
+                                        ¿Cuántos salen de 1 caja?
+                                    </p>
+                                </div>
                             </div>
                         </div>
 

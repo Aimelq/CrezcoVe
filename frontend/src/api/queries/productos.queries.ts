@@ -47,6 +47,9 @@ export const useCrearProducto = () => {
             queryClient.invalidateQueries({ queryKey: ['productos'] });
             toast.success('Producto creado exitosamente');
         },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.mensaje || 'Error al crear producto');
+        }
     });
 };
 
@@ -63,6 +66,9 @@ export const useActualizarProducto = () => {
             queryClient.invalidateQueries({ queryKey: ['producto', variables.id] });
             toast.success('Producto actualizado exitosamente');
         },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.mensaje || 'Error al actualizar producto');
+        }
     });
 };
 
