@@ -76,36 +76,48 @@ class ServicioAlertas:
         if not producto:
             return
             
-        costo = float(producto.costo_promedio)
+        costo_promedio = float(producto.costo_promedio or 0)
+        ultimo_costo = float(producto.ultimo_costo_compra or 0)
+        
+        # Usar el mayor costo para asegurar ganancia sobre lotes caros (Reposición)
+        costo_base = max(costo_promedio, ultimo_costo)
+        
         precio = float(producto.precio_venta)
-        margen_actual = producto.margen_actual
         margen_deseado = float(producto.margen_deseado or 0)
         
-        # Calcular precio sugerido basado en margen deseado
-        # Formula: Precio = Costo / (1 - Margen)
-        precio_sugerido = None
-        if margen_deseado > 0 and margen_deseado < 100:
-            precio_sugerido = costo / (1 - (margen_deseado / 100))
-        
-        sugerencia_msg = f"\n\n💡 *Precio Sugerido:* ${precio_sugerido:.2f} (para margen del {margen_deseado}%)" if precio_sugerido else ""
+        # Calcular margen actual sobre el PRECIO DE VENTA (Net Margin) vs Markup
+        # El sistema usa Markup (Sobre Costo) en Producto.margen_actual: ((Precio - Costo) / Costo) * 100
+        # Entonces mantenemos consistencia:
+        if costo_base > 0:
+            margen_actual_real = ((precio - costo_base) / costo_base) * 100
+        else:
+            margen_actual_real = 100.0
 
-        if precio < costo:
+        # Calcular precio sugerido basado en Markup sobre Costo Base
+        # Formula: Precio = Costo * (1 + Margen/100)
+        precio_sugerido = 0
+        if margen_deseado > 0:
+            precio_sugerido = costo_base * (1 + (margen_deseado / 100))
+        
+        sugerencia_msg = f"\n\n💡 *Precio Sugerido:* ${precio_sugerido:.2f} (Base Costo: ${costo_base:.2f}, Margen: {margen_deseado}%)" if precio_sugerido > 0 else ""
+
+        if precio < costo_base:
             ServicioAlertas.crear_alerta(
                 tipo_alerta='MARGEN_BAJO',
                 titulo=f"Pérdida Detectada: {producto.nombre}",
-                mensaje=f"¡CRÍTICO! El precio de venta (${precio:.2f}) es menor al costo de adquisición (${costo:.2f}). Cada venta genera pérdidas.{sugerencia_msg}",
+                mensaje=f"¡CRÍTICO! El precio de venta (${precio:.2f}) es menor al costo de reposición/promedio (${costo_base:.2f}). Ajusta el precio de inmediato.{sugerencia_msg}",
                 prioridad='CRITICA',
                 producto_id=producto.id,
-                datos_adicionales={'precio_sugerido': precio_sugerido, 'costo': costo}
+                datos_adicionales={'precio_sugerido': precio_sugerido, 'costo_base': costo_base}
             )
-        elif margen_actual < (margen_deseado * 0.3): # Menos del 30% del margen deseado (umbral de pánico)
+        elif margen_actual_real < (margen_deseado * 0.8): # Alerta si el margen baja del 80% del deseado (antes era 30%, muy permisivo)
              ServicioAlertas.crear_alerta(
                 tipo_alerta='MARGEN_BAJO',
-                titulo=f"Margen muy bajo: {producto.nombre}",
-                mensaje=f"El margen actual ({margen_actual:.1f}%) está muy por debajo de tu objetivo ({margen_deseado:.1f}%). Revisa tus precios.{sugerencia_msg}",
+                titulo=f"Margen bajo: {producto.nombre}",
+                mensaje=f"El margen real ({margen_actual_real:.1f}%) está por debajo de tu objetivo ({margen_deseado:.1f}%). Revisa tus costos.{sugerencia_msg}",
                 prioridad='ALTA',
                 producto_id=producto.id,
-                datos_adicionales={'precio_sugerido': precio_sugerido, 'costo': costo}
+                datos_adicionales={'precio_sugerido': precio_sugerido, 'costo_base': costo_base}
             )
 
     @staticmethod

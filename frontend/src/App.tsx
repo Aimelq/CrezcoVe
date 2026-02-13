@@ -11,6 +11,7 @@ import ProductosPage from './pages/Products/ProductosPage'
 import InventarioPage from './pages/Inventory/InventarioPage'
 import ProveedoresPage from './pages/Suppliers/ProveedoresPage'
 import ReportesPage from './pages/Reports/ReportesPage'
+import ReporteVentasPage from './pages/Reports/ReporteVentasPage'
 import ProfilePage from './pages/Profile/ProfilePage'
 import UsuariosPage from './pages/Admin/UsuariosPage'
 import VerificarEmailPage from './pages/Auth/VerificarEmailPage'
@@ -89,6 +90,7 @@ function App() {
                 <Route path="inventario" element={<InventarioPage />} />
                 <Route path="proveedores" element={<ProveedoresPage />} />
                 <Route path="reportes" element={<ReportesPage />} />
+                <Route path="reportes/ventas" element={<ReporteVentasPage />} />
                 <Route path="configuracion" element={<ProfilePage />} />
                 <Route path="usuarios" element={<UsuariosPage />} />
                 <Route path="lotes" element={<LotesPage />} />

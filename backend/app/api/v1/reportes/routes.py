@@ -3,7 +3,9 @@ Endpoints de Reportes.
 Genera reportes y estadísticas del sistema.
 """
 from datetime import datetime, timedelta
-from flask import request
+import io
+import pandas as pd
+from flask import request, send_file
 from flask_restx import Namespace, Resource
 from flask_jwt_extended import jwt_required
 from sqlalchemy import func
@@ -125,3 +127,132 @@ class AlertasActivas(Resource):
             'alertas': [a.to_dict() for a in alertas],
             'total': len(alertas)
         }
+
+@reportes_ns.route('/ventas/excel')
+class ReporteVentasExcel(Resource):
+    @jwt_required()
+    def get(self):
+        """Descarga reporte de ventas en Excel (Mensual o Diario)."""
+        try:
+            tipo = request.args.get('tipo', 'mensual') # 'mensual' o 'diario'
+            
+            if tipo == 'mensual':
+                return self._reporte_mensual()
+            elif tipo == 'diario':
+                return self._reporte_diario()
+            else:
+                reportes_ns.abort(400, "Tipo de reporte no válido")
+
+        except Exception as e:
+            reportes_ns.abort(500, f"Error generando reporte: {str(e)}")
+
+    def _reporte_mensual(self):
+        mes = request.args.get('mes', type=int, default=datetime.now().month)
+        anio = request.args.get('anio', type=int, default=datetime.now().year)
+
+        fecha_inicio = datetime(anio, mes, 1, 0, 0, 0)
+        if mes == 12:
+            fecha_fin = datetime(anio + 1, 1, 1, 0, 0, 0) - timedelta(seconds=1)
+        else:
+            fecha_fin = datetime(anio, mes + 1, 1, 0, 0, 0) - timedelta(seconds=1)
+
+        # Agrupar ventas por día
+        movimientos = db.session.query(
+            func.date(MovimientoInventario.fecha_movimiento).label('fecha'),
+            func.count(MovimientoInventario.id).label('cantidad_ventas'),
+            func.sum(MovimientoInventario.precio_total).label('total_vendido')
+        ).filter(
+            MovimientoInventario.tipo_movimiento == 'VENTA',
+            MovimientoInventario.fecha_movimiento >= fecha_inicio,
+            MovimientoInventario.fecha_movimiento <= fecha_fin
+        ).group_by(
+            func.date(MovimientoInventario.fecha_movimiento)
+        ).order_by(
+            func.date(MovimientoInventario.fecha_movimiento)
+        ).all()
+
+        data = []
+        for fecha, cantidad, total in movimientos:
+            data.append({
+                'Fecha': fecha.strftime('%Y-%m-%d'),
+                'Cantidad Ventas': cantidad,
+                'Total Vendido ($)': float(total or 0)
+            })
+        
+        df = pd.DataFrame(data)
+        
+        if not df.empty:
+            total_row = pd.DataFrame([{
+                'Fecha': 'TOTALES',
+                'Cantidad Ventas': df['Cantidad Ventas'].sum(),
+                'Total Vendido ($)': df['Total Vendido ($)'].sum()
+            }])
+            df = pd.concat([df, total_row], ignore_index=True)
+
+        return self._generar_excel(df, f"Ventas_Mensual_{mes:02d}_{anio}")
+
+    def _reporte_diario(self):
+        fecha_str = request.args.get('fecha') # YYYY-MM-DD
+        if not fecha_str:
+            reportes_ns.abort(400, "Fecha requerida para reporte diario")
+            
+        try:
+            fecha_obj = datetime.strptime(fecha_str, '%Y-%m-%d')
+            fecha_inicio = fecha_obj.replace(hour=0, minute=0, second=0)
+            fecha_fin = fecha_obj.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            reportes_ns.abort(400, "Formato de fecha inválido (YYYY-MM-DD)")
+
+        # Consultar transacciones del día
+        movimientos = MovimientoInventario.query.filter(
+            MovimientoInventario.tipo_movimiento == 'VENTA',
+            MovimientoInventario.fecha_movimiento >= fecha_inicio,
+            MovimientoInventario.fecha_movimiento <= fecha_fin
+        ).order_by(MovimientoInventario.fecha_movimiento).all()
+
+        data = []
+        for mov in movimientos:
+            data.append({
+                'Hora': mov.fecha_movimiento.strftime('%H:%M:%S'),
+                'Referencia': mov.referencia_id or 'S/R',
+                'Total Venta ($)': float(mov.precio_total or 0),
+                'Notas': mov.notas or ''
+            })
+
+        df = pd.DataFrame(data)
+
+        if not df.empty:
+            total_row = pd.DataFrame([{
+                'Hora': 'TOTAL',
+                'Referencia': '',
+                'Total Venta ($)': df['Total Venta ($)'].sum(),
+                'Notas': ''
+            }])
+            df = pd.concat([df, total_row], ignore_index=True)
+
+        return self._generar_excel(df, f"Ventas_Diario_{fecha_str}")
+
+    def _generar_excel(self, df, filename):
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            sheet_name = 'Reporte'
+            df.to_excel(writer, index=False, sheet_name=sheet_name)
+            
+            worksheet = writer.sheets[sheet_name]
+            for column in worksheet.columns:
+                max_length = 0
+                column = [cell for cell in column]
+                try:
+                    max_length = max(len(str(cell.value)) for cell in column)
+                    adjusted_width = (max_length + 2)
+                    worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
+                except:
+                    pass
+        
+        output.seek(0)
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f"{filename}.xlsx"
+        )

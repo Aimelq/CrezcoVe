@@ -8,7 +8,8 @@ import {
     Box,
     X,
     TrendingUp,
-    Settings
+    Settings,
+    FileSpreadsheet
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth.store'
 import { cn } from '@/lib/utils'
@@ -64,6 +65,12 @@ const menuItems = [
         path: '/reportes',
         roles: ['DUENO']
     },
+    {
+        title: 'Reporte Ventas',
+        icon: FileSpreadsheet,
+        path: '/reportes/ventas',
+        roles: ['DUENO']
+    },
 ]
 
 export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose?: () => void }) {
@@ -101,15 +108,19 @@ export default function Sidebar({ isOpen, onClose }: { isOpen?: boolean, onClose
                 </div>
 
                 {/* Navegación */}
-                <nav className="flex-1 p-4 space-y-1">
+                <nav className="flex-1 overflow-y-auto p-4 space-y-1">
                     {filteredItems.map((item) => (
                         <NavLink
                             key={item.path}
                             to={item.path}
-                            onClick={onClose}
+                            onClick={() => {
+                                if (window.innerWidth < 1024 && onClose) {
+                                    onClose()
+                                }
+                            }}
                             className={({ isActive }) =>
                                 cn(
-                                    'flex items-center gap-3 px-4 py-3 rounded-lg transition-colors',
+                                    'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors',
                                     'hover:bg-gray-100',
                                     isActive
                                         ? 'bg-primary text-white hover:bg-primary/90'
