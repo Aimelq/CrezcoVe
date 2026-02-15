@@ -116,6 +116,16 @@ class IngresoInventario(Resource):
         producto = Producto.query.get(datos['producto_id'])
         if not producto:
             inventario_ns.abort(404, 'Producto no encontrado')
+            
+        # Validar vencimiento para perecederos
+        if producto.tiene_vencimiento:
+            if not datos.get('fecha_vencimiento'):
+                inventario_ns.abort(400, f'El producto "{producto.nombre}" es perecedero y requiere fecha de vencimiento.')
+            
+            # Validar que no esté ya vencido (opcional, pero recomendado)
+            fecha_venc = datetime.strptime(datos['fecha_vencimiento'], '%Y-%m-%d').date()
+            if fecha_venc < datetime.now().date():
+                inventario_ns.abort(400, 'No se puede registrar ingreso de producto ya vencido.')
         
         # Calcular nuevo costo promedio
         resultado_costo = CalculadoraCosto.calcular_nuevo_costo_promedio(

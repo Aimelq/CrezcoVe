@@ -136,8 +136,8 @@ export default function ProductosPage() {
                                             <div className="text-sm font-medium text-gray-900">
                                                 ${producto.precio_venta.toFixed(2)}
                                             </div>
-                                            <div className="text-xs text-gray-500">
-                                                Costo: ${producto.costo_promedio.toFixed(2)}
+                                            <div className="text-xs text-gray-500" title="Costo de Reposición (Mayor entre promedio y última compra)">
+                                                Costo Ref: ${(producto.costo_referencia || producto.costo_promedio).toFixed(2)}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">

@@ -105,7 +105,11 @@ apiClient.interceptors.response.use(
             mensaje = data.error;
         }
 
-        toast.error(mensaje);
+        // Solo mostrar toast si la query/mutation no va a manejarlo manualmente
+        // Usamos una convención: si el config tiene suppressToast: true, no mostramos toast aquí
+        if (!originalRequest.suppressToast) {
+            toast.error(mensaje);
+        }
 
         return Promise.reject(error);
     }

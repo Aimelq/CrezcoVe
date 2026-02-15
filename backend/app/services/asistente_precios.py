@@ -26,6 +26,11 @@ class AsistentePrecios:
             raise ValueError(f'Producto con ID {producto_id} no encontrado')
         
         costo_actual = Decimal(str(producto.costo_promedio))
+        ultimo_costo = Decimal(str(producto.ultimo_costo_compra)) if producto.ultimo_costo_compra else Decimal('0')
+        
+        # Usar el mayor entre costo promedio y último costo como referencia base
+        costo_referencia = max(costo_actual, ultimo_costo)
+        
         precio_venta_actual = Decimal(str(producto.precio_venta))
         margen_deseado = Decimal(str(producto.margen_deseado))
         nuevo_costo_dec = Decimal(str(nuevo_costo))
@@ -47,8 +52,9 @@ class AsistentePrecios:
         precio_sugerido = precio_sugerido.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         
         # Calcular variación de costo
-        if costo_actual > 0:
-            variacion_costo = ((nuevo_costo_dec - costo_actual) / costo_actual) * 100
+        # Calcular variación de costo respecto a la referencia (última compra o promedio)
+        if costo_referencia > 0:
+            variacion_costo = ((nuevo_costo_dec - costo_referencia) / costo_referencia) * 100
         else:
             variacion_costo = Decimal('0')
         

@@ -14,7 +14,10 @@ export const useLogin = () => {
 
     return useMutation({
         mutationFn: async (data: LoginRequest) => {
-            const response = await apiClient.post<AuthResponse>('/auth/login', data);
+            const response = await apiClient.post<AuthResponse>('/auth/login', data, {
+                // @ts-ignore - suppressToast es una propiedad custom
+                suppressToast: true
+            });
             return response.data;
         },
         onSuccess: (data) => {
@@ -39,7 +42,10 @@ export const useRegistro = () => {
 
     return useMutation({
         mutationFn: async (data: RegistroRequest) => {
-            const response = await apiClient.post<AuthResponse>('/auth/registro', data);
+            const response = await apiClient.post<AuthResponse>('/auth/registro', data, {
+                // @ts-ignore - suppressToast es una propiedad custom
+                suppressToast: true
+            });
             return response.data;
         },
         onSuccess: (data: any) => {

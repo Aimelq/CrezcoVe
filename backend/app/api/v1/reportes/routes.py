@@ -156,27 +156,37 @@ class ReporteVentasExcel(Resource):
         else:
             fecha_fin = datetime(anio, mes + 1, 1, 0, 0, 0) - timedelta(seconds=1)
 
-        # Agrupar ventas por día
+        # Consultar movimientos detallados
         movimientos = db.session.query(
-            func.date(MovimientoInventario.fecha_movimiento).label('fecha'),
-            func.count(MovimientoInventario.id).label('cantidad_ventas'),
-            func.sum(MovimientoInventario.precio_total).label('total_vendido')
+            MovimientoInventario, Producto, Usuario
+        ).join(
+            Producto, MovimientoInventario.producto_id == Producto.id
+        ).join(
+            Usuario, MovimientoInventario.usuario_id == Usuario.id
         ).filter(
             MovimientoInventario.tipo_movimiento == 'VENTA',
             MovimientoInventario.fecha_movimiento >= fecha_inicio,
             MovimientoInventario.fecha_movimiento <= fecha_fin
-        ).group_by(
-            func.date(MovimientoInventario.fecha_movimiento)
         ).order_by(
-            func.date(MovimientoInventario.fecha_movimiento)
+            MovimientoInventario.fecha_movimiento.desc()
         ).all()
 
         data = []
-        for fecha, cantidad, total in movimientos:
+        for mov, prod, user in movimientos:
             data.append({
-                'Fecha': fecha.strftime('%Y-%m-%d'),
-                'Cantidad Ventas': cantidad,
-                'Total Vendido ($)': float(total or 0)
+                'Fecha': mov.fecha_movimiento.strftime('%Y-%m-%d'),
+                'Hora': mov.fecha_movimiento.strftime('%H:%M'),
+                'SKU': prod.codigo_sku,
+                'Producto': prod.nombre,
+                'Categoría': prod.categoria.nombre if prod.categoria else 'Sin Categoría',
+                'Vendedor': user.nombre_completo,
+                'Costo Unit. ($)': float(mov.costo_unitario or 0),
+                'Precio Unit. ($)': float(mov.precio_unitario or 0),
+                'Cantidad': abs(mov.cantidad),
+                'Total Venta ($)': float(mov.precio_total or 0),
+                'Ganancia ($)': float(mov.ganancia or 0),
+                'Referencia': mov.referencia_id or '',
+                'Notas': mov.notas or ''
             })
         
         df = pd.DataFrame(data)
@@ -184,12 +194,22 @@ class ReporteVentasExcel(Resource):
         if not df.empty:
             total_row = pd.DataFrame([{
                 'Fecha': 'TOTALES',
-                'Cantidad Ventas': df['Cantidad Ventas'].sum(),
-                'Total Vendido ($)': df['Total Vendido ($)'].sum()
+                'Hora': '',
+                'SKU': '',
+                'Producto': f"Ventas: {len(df)}",
+                'Categoría': '',
+                'Vendedor': '',
+                'Costo Unit. ($)': 0,
+                'Precio Unit. ($)': 0,
+                'Cantidad': df['Cantidad'].sum(),
+                'Total Venta ($)': df['Total Venta ($)'].sum(),
+                'Ganancia ($)': df['Ganancia ($)'].sum(),
+                'Referencia': '',
+                'Notas': ''
             }])
             df = pd.concat([df, total_row], ignore_index=True)
 
-        return self._generar_excel(df, f"Ventas_Mensual_{mes:02d}_{anio}")
+        return self._generar_excel(df, f"Reporte_Ventas_Mensual_{mes:02d}_{anio}")
 
     def _reporte_diario(self):
         fecha_str = request.args.get('fecha') # YYYY-MM-DD
@@ -203,19 +223,35 @@ class ReporteVentasExcel(Resource):
         except ValueError:
             reportes_ns.abort(400, "Formato de fecha inválido (YYYY-MM-DD)")
 
-        # Consultar transacciones del día
-        movimientos = MovimientoInventario.query.filter(
+        # Consultar movimientos detallados
+        movimientos = db.session.query(
+            MovimientoInventario, Producto, Usuario
+        ).join(
+            Producto, MovimientoInventario.producto_id == Producto.id
+        ).join(
+            Usuario, MovimientoInventario.usuario_id == Usuario.id
+        ).filter(
             MovimientoInventario.tipo_movimiento == 'VENTA',
             MovimientoInventario.fecha_movimiento >= fecha_inicio,
             MovimientoInventario.fecha_movimiento <= fecha_fin
-        ).order_by(MovimientoInventario.fecha_movimiento).all()
+        ).order_by(
+            MovimientoInventario.fecha_movimiento.desc()
+        ).all()
 
         data = []
-        for mov in movimientos:
+        for mov, prod, user in movimientos:
             data.append({
-                'Hora': mov.fecha_movimiento.strftime('%H:%M:%S'),
-                'Referencia': mov.referencia_id or 'S/R',
+                'Hora': mov.fecha_movimiento.strftime('%H:%M'),
+                'SKU': prod.codigo_sku,
+                'Producto': prod.nombre,
+                'Categoría': prod.categoria.nombre if prod.categoria else 'Sin Categoría',
+                'Vendedor': user.nombre_completo,
+                'Costo Unit. ($)': float(mov.costo_unitario or 0),
+                'Precio Unit. ($)': float(mov.precio_unitario or 0),
+                'Cantidad': abs(mov.cantidad),
                 'Total Venta ($)': float(mov.precio_total or 0),
+                'Ganancia ($)': float(mov.ganancia or 0),
+                'Referencia': mov.referencia_id or '',
                 'Notas': mov.notas or ''
             })
 
@@ -223,14 +259,22 @@ class ReporteVentasExcel(Resource):
 
         if not df.empty:
             total_row = pd.DataFrame([{
-                'Hora': 'TOTAL',
-                'Referencia': '',
+                'Hora': 'TOTALES',
+                'SKU': '',
+                'Producto': f"Transacciones: {len(df)}",
+                'Categoría': '',
+                'Vendedor': '',
+                'Costo Unit. ($)': 0,
+                'Precio Unit. ($)': 0,
+                'Cantidad': df['Cantidad'].sum(),
                 'Total Venta ($)': df['Total Venta ($)'].sum(),
+                'Ganancia ($)': df['Ganancia ($)'].sum(),
+                'Referencia': '',
                 'Notas': ''
             }])
             df = pd.concat([df, total_row], ignore_index=True)
 
-        return self._generar_excel(df, f"Ventas_Diario_{fecha_str}")
+        return self._generar_excel(df, f"Reporte_Ventas_Diario_{fecha_str}")
 
     def _generar_excel(self, df, filename):
         output = io.BytesIO()

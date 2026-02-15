@@ -29,6 +29,7 @@ export interface Producto {
     costo_promedio: number;
     ultimo_costo_compra?: number;
     precio_venta: number;
+    costo_referencia?: number; // Costo de Reposición (max of avg and last purchase)
     margen_deseado: number;
     tiene_vencimiento: boolean;
     dias_vencimiento?: number;

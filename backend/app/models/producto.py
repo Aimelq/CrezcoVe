@@ -82,6 +82,12 @@ class Producto(ModeloBase):
         data['costo_promedio'] = float(self.costo_promedio)
         data['ultimo_costo_compra'] = float(self.ultimo_costo_compra) if self.ultimo_costo_compra else None
         data['precio_venta'] = float(self.precio_venta)
+        
+        # Costo de Referencia (Reposición): Prioriza el último costo para decisiones de precio
+        costo_avg = float(self.costo_promedio)
+        ultimo_costo = float(self.ultimo_costo_compra) if self.ultimo_costo_compra else 0
+        data['costo_referencia'] = max(costo_avg, ultimo_costo) if ultimo_costo > 0 else costo_avg
+        
         return data
     
     def soft_delete(self):

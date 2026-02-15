@@ -1,4 +1,5 @@
 # Archivos de entornoS
+.env
 .env.local
 .env.production
 

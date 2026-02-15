@@ -8,6 +8,7 @@ from app.models import Producto, MovimientoInventario, Alerta
 from app.services.notificaciones_telegram import servicio_telegram
 from app.services.prediccion_agotamiento import ServicioPrediccion
 from app.services.auditoria_ciega import ServicioAuditoriaCiega
+from app.services.servicio_alertas import ServicioAlertas
 import os
 
 # Configurar Celery
@@ -31,21 +32,13 @@ def verificar_stock_bajo():
     ).all()
     
     for producto in productos_bajo_stock:
-        # Crear alerta
-        alerta = Alerta(
-            producto_id=producto.id,
+        # Crear alerta usando el servicio (maneja deduplicación automáticamente)
+        ServicioAlertas.crear_alerta(
             tipo_alerta='STOCK_BAJO',
             titulo=f'Stock bajo: {producto.nombre}',
             mensaje=f'El producto {producto.nombre} tiene stock bajo ({producto.cantidad_actual} unidades)',
-            prioridad='ALTA'
-        )
-        db.session.add(alerta)
-        
-        # Enviar notificación de Telegram
-        servicio_telegram.notificar_stock_bajo(
-            producto.nombre,
-            producto.cantidad_actual,
-            producto.stock_minimo
+            prioridad='ALTA',
+            producto_id=producto.id
         )
         
         # Marcar como notificado
@@ -63,36 +56,22 @@ def verificar_productos_criticos():
     """
     productos_criticos = ServicioPrediccion.obtener_productos_criticos(limite=20)
     
-    notificaciones_enviadas = 0
+    alertas_creadas = 0
     
     for producto_data in productos_criticos:
         if producto_data.get('nivel_urgencia') in ['AGOTADO', 'CRITICO', 'URGENTE']:
-            # 1. Crear alerta en base de datos si no existe una activa igual
-            alerta_existente = Alerta.query.filter_by(
-                producto_id=producto_data['producto_id'],
+            # Crear alerta usando el servicio (maneja deduplicación automáticamente)
+            ServicioAlertas.crear_alerta(
                 tipo_alerta='STOCK_CRITICO',
-                esta_resuelta=False
-            ).first()
-            
-            if not alerta_existente:
-                nueva_alerta = Alerta(
-                    producto_id=producto_data['producto_id'],
-                    tipo_alerta='STOCK_CRITICO',
-                    titulo=f"Nivel {producto_data['nivel_urgencia']}: {producto_data['producto_nombre']}",
-                    mensaje=f"El producto está en nivel {producto_data['nivel_urgencia']}. Stock: {producto_data['stock_actual']}. Sugerencia: Pedir {producto_data['cantidad_sugerida_pedido']} unidades.",
-                    prioridad='CRITICA' if producto_data['nivel_urgencia'] == 'AGOTADO' else 'ALTA'
-                )
-                db.session.add(nueva_alerta)
-            
-            # 2. Notificar por Telegram
-            servicio_telegram.notificar_producto_agotado(
-                producto_data['producto_nombre'],
-                int(producto_data.get('dias_hasta_agotar', 0) or 0)
+                titulo=f"Nivel {producto_data['nivel_urgencia']}: {producto_data['producto_nombre']}",
+                mensaje=f"El producto está en nivel {producto_data['nivel_urgencia']}. Stock: {producto_data['stock_actual']}. Sugerencia: Pedir {producto_data['cantidad_sugerida_pedido']} unidades.",
+                prioridad='CRITICA' if producto_data['nivel_urgencia'] == 'AGOTADO' else 'ALTA',
+                producto_id=producto_data['producto_id']
             )
-            notificaciones_enviadas += 1
+            alertas_creadas += 1
     
     db.session.commit()
-    return f"Enviadas {notificaciones_enviadas} notificaciones de productos críticos"
+    return f"Procesados {len(productos_criticos)} productos críticos, {alertas_creadas} alertas creadas/actualizadas"
 
 
 @celery_app.task
@@ -191,24 +170,17 @@ def verificar_dinero_dormido():
     for p_data in reporte.get('productos', []):
         # Solo alertar si el valor es significativo o lleva mucho tiempo
         if p_data['valor_inmovilizado'] > 50 or (p_data['dias_sin_venta'] and p_data['dias_sin_venta'] > 120):
-            alerta_existente = Alerta.query.filter_by(
-                producto_id=p_data['producto_id'],
+            # Crear alerta usando el servicio (maneja deduplicación automáticamente)
+            ServicioAlertas.crear_alerta(
                 tipo_alerta='SIN_MOVIMIENTO',
-                esta_resuelta=False
-            ).first()
-            
-            if not alerta_existente:
-                alerta = Alerta(
-                    producto_id=p_data['producto_id'],
-                    tipo_alerta='SIN_MOVIMIENTO',
-                    titulo=f"Dinero Dormido: {p_data['nombre']}",
-                    mensaje=f"El producto lleva {p_data['dias_sin_venta']} días sin ventas. "
-                           f"Hay ${p_data['valor_inmovilizado']:.2f} inmovilizados. "
-                           f"Sugerencia: Aplicar descuento del {p_data['descuento_sugerido_porcentaje']}%",
-                    prioridad='BAJA' if p_data['valor_inmovilizado'] < 200 else 'MEDIA'
-                )
-                db.session.add(alerta)
-                alertas_creadas += 1
+                titulo=f"Dinero Dormido: {p_data['nombre']}",
+                mensaje=f"El producto lleva {p_data['dias_sin_venta']} días sin ventas. "
+                       f"Hay ${p_data['valor_inmovilizado']:.2f} inmovilizados. "
+                       f"Sugerencia: Aplicar descuento del {p_data['descuento_sugerido_porcentaje']}%",
+                prioridad='BAJA' if p_data['valor_inmovilizado'] < 200 else 'MEDIA',
+                producto_id=p_data['producto_id']
+            )
+            alertas_creadas += 1
     
     db.session.commit()
     return f"Generadas {alertas_creadas} alertas de dinero dormido"
