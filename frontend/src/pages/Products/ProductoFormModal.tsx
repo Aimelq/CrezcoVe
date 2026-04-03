@@ -42,7 +42,9 @@ export default function ProductoFormModal({ productoId, onClose }: ProductoFormM
 
         numericFields.forEach(field => {
             const val = cleanData[field];
-            if (val === undefined || val === null || val === "" || (typeof val === 'number' && isNaN(val)) || val === "0" || val === 0) {
+            if (val === undefined || val === null || val === "" || (typeof val === 'number' && isNaN(val))) {
+                delete cleanData[field];
+            } else if ((val === "0" || val === 0) && field === 'producto_padre_id') {
                 // Especial para producto_padre_id: 0 es un valor nulo de facto
                 delete cleanData[field];
             } else {
@@ -247,7 +249,7 @@ export default function ProductoFormModal({ productoId, onClose }: ProductoFormM
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-4">
+                        <div className="flex flex-col gap-3">
                             <label className="flex items-center gap-2">
                                 <input
                                     type="checkbox"
@@ -255,6 +257,18 @@ export default function ProductoFormModal({ productoId, onClose }: ProductoFormM
                                     className="w-4 h-4 text-primary rounded focus:ring-primary"
                                 />
                                 <span className="text-sm font-medium text-gray-700">Tiene fecha de vencimiento</span>
+                            </label>
+                            
+                            <label className="flex items-center gap-2 bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                                <input
+                                    type="checkbox"
+                                    {...register('permite_decimales')}
+                                    className="w-4 h-4 text-yellow-600 rounded focus:ring-yellow-500"
+                                />
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-bold text-yellow-900">Permitir venta fraccionada (Decimales)</span>
+                                    <span className="text-xs text-yellow-700">Activa esto solo para productos a granel/peso como Quesos, Cables, Telas.</span>
+                                </div>
                             </label>
                         </div>
 

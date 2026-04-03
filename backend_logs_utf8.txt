@@ -1,0 +1,100 @@
+﻿inventario_backend  | 2026-04-02 12:53:15,482 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+inventario_backend  | 2026-04-02 12:53:15,482 INFO sqlalchemy.engine.Engine SELECT alertas.producto_id AS alertas_producto_id, alertas.tipo_alerta AS alertas_tipo_alerta, alertas.titulo AS alertas_titulo, alertas.mensaje AS alertas_mensaje, alertas.prioridad AS alertas_prioridad, alertas.esta_resuelta AS alertas_esta_resuelta, alertas.fecha_resolucion AS alertas_fecha_resolucion, alertas.resuelta_por_id AS alertas_resuelta_por_id, alertas.notas_resolucion AS alertas_notas_resolucion, alertas.notificada AS alertas_notificada, alertas.fecha_notificacion AS alertas_fecha_notificacion, alertas.datos_adicionales AS alertas_datos_adicionales, alertas.id AS alertas_id, alertas.creado_en AS alertas_creado_en, alertas.actualizado_en AS alertas_actualizado_en, alertas.esta_activo AS alertas_esta_activo 
+inventario_backend  | FROM alertas 
+inventario_backend  | WHERE alertas.esta_resuelta = false AND alertas.esta_activo = true ORDER BY alertas.creado_en DESC 
+inventario_backend  |  LIMIT %(param_1)s
+inventario_backend  | 2026-04-02 12:53:15,483 INFO sqlalchemy.engine.Engine [cached since 507.6s ago] {'param_1': 50}
+inventario_backend  | 2026-04-02 12:53:15,483 INFO sqlalchemy.engine.Engine ROLLBACK
+inventario_backend  | 172.19.0.8 - - [02/Apr/2026 12:53:15] "GET /api/reportes/productos-criticos?limite=10 HTTP/1.1" 200 -
+inventario_backend  | 2026-04-02 12:53:15,485 INFO sqlalchemy.engine.Engine ROLLBACK
+inventario_backend  | 172.19.0.8 - - [02/Apr/2026 12:53:15] "GET /api/reportes/alertas-activas HTTP/1.1" 200 -
+inventario_backend  | [2026-04-02 12:53:29,930] ERROR in app: Exception on /api/reportes/ventas/excel [GET]
+inventario_backend  | Traceback (most recent call last):
+inventario_backend  |   File "/app/app/api/v1/reportes/routes.py", line 140, in get
+inventario_backend  |     return self._reporte_mensual()
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/app/app/api/v1/reportes/routes.py", line 161, in _reporte_mensual
+inventario_backend  |     MovimientoInventario, Producto, Usuario
+inventario_backend  |                                     ^^^^^^^
+inventario_backend  | NameError: name 'Usuario' is not defined
+inventario_backend  | 
+inventario_backend  | During handling of the above exception, another exception occurred:
+inventario_backend  | 
+inventario_backend  | Traceback (most recent call last):
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 867, in full_dispatch_request
+inventario_backend  |     rv = self.dispatch_request()
+inventario_backend  |          ^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 852, in dispatch_request
+inventario_backend  |     return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/api.py", line 402, in wrapper
+inventario_backend  |     resp = resource(*args, **kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/views.py", line 109, in view
+inventario_backend  |     return current_app.ensure_sync(self.dispatch_request)(**kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/resource.py", line 41, in dispatch_request
+inventario_backend  |     resp = meth(*args, **kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_jwt_extended/view_decorators.py", line 170, in decorator
+inventario_backend  |     return current_app.ensure_sync(fn)(*args, **kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/app/app/api/v1/reportes/routes.py", line 147, in get
+inventario_backend  |     reportes_ns.abort(500, f"Error generando reporte: {str(e)}")
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/namespace.py", line 153, in abort
+inventario_backend  |     abort(*args, **kwargs)
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/errors.py", line 28, in abort
+inventario_backend  |     flask.abort(code)
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/helpers.py", line 274, in abort
+inventario_backend  |     current_app.aborter(code, *args, **kwargs)
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/werkzeug/exceptions.py", line 887, in __call__
+inventario_backend  |     raise self.mapping[code](*args, **kwargs)
+inventario_backend  | werkzeug.exceptions.InternalServerError: 500 Internal Server Error: The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.
+inventario_backend  | 172.19.0.8 - - [02/Apr/2026 12:53:30] "[35m[1mGET /api/reportes/ventas/excel?tipo=mensual&mes=4&anio=2026 HTTP/1.1[0m" 500 -
+inventario_backend  | [2026-04-02 12:53:45,637] ERROR in app: Exception on /api/reportes/ventas/excel [GET]
+inventario_backend  | Traceback (most recent call last):
+inventario_backend  |   File "/app/app/api/v1/reportes/routes.py", line 142, in get
+inventario_backend  |     return self._reporte_diario()
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/app/app/api/v1/reportes/routes.py", line 228, in _reporte_diario
+inventario_backend  |     MovimientoInventario, Producto, Usuario
+inventario_backend  |                                     ^^^^^^^
+inventario_backend  | NameError: name 'Usuario' is not defined
+inventario_backend  | 
+inventario_backend  | During handling of the above exception, another exception occurred:
+inventario_backend  | 
+inventario_backend  | Traceback (most recent call last):
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 867, in full_dispatch_request
+inventario_backend  |     rv = self.dispatch_request()
+inventario_backend  |          ^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/app.py", line 852, in dispatch_request
+inventario_backend  |     return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/api.py", line 402, in wrapper
+inventario_backend  |     resp = resource(*args, **kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/views.py", line 109, in view
+inventario_backend  |     return current_app.ensure_sync(self.dispatch_request)(**kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/resource.py", line 41, in dispatch_request
+inventario_backend  |     resp = meth(*args, **kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_jwt_extended/view_decorators.py", line 170, in decorator
+inventario_backend  |     return current_app.ensure_sync(fn)(*args, **kwargs)
+inventario_backend  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+inventario_backend  |   File "/app/app/api/v1/reportes/routes.py", line 147, in get
+inventario_backend  |     reportes_ns.abort(500, f"Error generando reporte: {str(e)}")
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/namespace.py", line 153, in abort
+inventario_backend  |     abort(*args, **kwargs)
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask_restx/errors.py", line 28, in abort
+inventario_backend  |     flask.abort(code)
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/flask/helpers.py", line 274, in abort
+inventario_backend  |     current_app.aborter(code, *args, **kwargs)
+inventario_backend  |   File "/usr/local/lib/python3.11/site-packages/werkzeug/exceptions.py", line 887, in __call__
+inventario_backend  |     raise self.mapping[code](*args, **kwargs)
+inventario_backend  | werkzeug.exceptions.InternalServerError: 500 Internal Server Error: The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.
+inventario_backend  | 172.19.0.8 - - [02/Apr/2026 12:53:45] "[35m[1mGET /api/reportes/ventas/excel?tipo=diario&fecha=2026-04-02 HTTP/1.1[0m" 500 -
+inventario_backend  |  * Detected change in '/app/app/api/v1/reportes/routes.py', reloading
+inventario_backend  |  * Restarting with stat
+inventario_backend  |  * Debugger is active!
+inventario_backend  |  * Debugger PIN: 915-068-398

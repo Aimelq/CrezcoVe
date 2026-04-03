@@ -12,6 +12,7 @@ type TipoOperacion = 'ingreso' | 'salida' | 'ajuste'
 
 export default function InventarioPage() {
     const [tipoOperacion, setTipoOperacion] = useState<TipoOperacion | 'desempacar'>('ingreso')
+    const [tipoAjusteReal, setTipoAjusteReal] = useState<'aumento' | 'disminucion'>('disminucion')
 
     // Estado para venta múltiple (Carrito)
     const [carrito, setCarrito] = useState<ItemVenta[]>([])
@@ -29,7 +30,7 @@ export default function InventarioPage() {
 
     const { register: registerIngreso, handleSubmit: handleSubmitIngreso, reset: resetIngreso, setValue: setValueIngreso, watch: watchIngreso } = useForm<IngresoInventarioRequest>()
     const { register: registerSalida, reset: resetSalida, setValue: setValueSalida, watch: watchSalida } = useForm<SalidaInventarioRequest>()
-    const { register: registerAjuste, handleSubmit: handleSubmitAjuste, reset: resetAjuste, setValue: setValueAjuste } = useForm<AjusteInventarioRequest>()
+    const { register: registerAjuste, handleSubmit: handleSubmitAjuste, reset: resetAjuste, setValue: setValueAjuste, watch: watchAjuste } = useForm<AjusteInventarioRequest>()
     const { register: registerDesempacar, handleSubmit: handleSubmitDesempacar, reset: resetDesempacar, setValue: setValueDesempacar, watch: watchDesempacar } = useForm<{ producto_id: number; cantidad: number }>()
 
     const productoSeleccionadoId = watchIngreso('producto_id')
@@ -85,7 +86,13 @@ export default function InventarioPage() {
     }
 
     const onSubmitAjuste = (data: AjusteInventarioRequest) => {
-        registrarAjuste.mutate(data, {
+        const cantidadAbs = Math.abs(Number(data.cantidad));
+        const cantidadFinal = tipoAjusteReal === 'disminucion' ? -cantidadAbs : cantidadAbs;
+        
+        registrarAjuste.mutate({
+            ...data,
+            cantidad: cantidadFinal
+        }, {
             onSuccess: () => resetAjuste()
         })
     }
@@ -242,7 +249,7 @@ export default function InventarioPage() {
                                     </label>
                                     <input
                                         type="number"
-                                        step="0.01"
+                                        step={productoSeleccionado && !productoSeleccionado.permite_decimales ? "1" : "0.01"}
                                         {...registerIngreso('cantidad', { required: true, valueAsNumber: true })}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         placeholder="0"
@@ -355,7 +362,10 @@ export default function InventarioPage() {
                                     </label>
                                     <input
                                         type="number"
-                                        step="0.01"
+                                        step={(() => {
+                                            const p = productosData?.items.find(x => x.id === watchSalida('producto_id'))
+                                            return p && !p.permite_decimales ? "1" : "0.01"
+                                        })()}
                                         {...registerSalida('cantidad', { required: true, valueAsNumber: true })}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
                                         placeholder="0"
@@ -406,32 +416,59 @@ export default function InventarioPage() {
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Cantidad (+ o -) *
+                                        ¿Qué vas a hacer? *
                                     </label>
-                                    <input
-                                        type="number"
-                                        {...registerAjuste('cantidad', { required: true, valueAsNumber: true })}
-                                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                                        placeholder="-10 o +5"
-                                    />
+                                    <div className="flex bg-gray-100 rounded-lg p-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setTipoAjusteReal('disminucion')}
+                                            className={`flex-1 py-1 px-2 text-sm font-medium rounded-md transition-colors ${tipoAjusteReal === 'disminucion' ? 'bg-white text-red-600 shadow' : 'text-gray-500'}`}
+                                        >
+                                            Restar (-)
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setTipoAjusteReal('aumento')}
+                                            className={`flex-1 py-1 px-2 text-sm font-medium rounded-md transition-colors ${tipoAjusteReal === 'aumento' ? 'bg-white text-green-600 shadow' : 'text-gray-500'}`}
+                                        >
+                                            Sumar (+)
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Motivo *
+                                        Cantidad *
                                     </label>
-                                    <select
-                                        {...registerAjuste('motivo_ajuste', { required: true })}
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step={(() => {
+                                            const p = productosData?.items.find(x => x.id === watchAjuste('producto_id'))
+                                            return p && !p.permite_decimales ? "1" : "0.01"
+                                        })()}
+                                        {...registerAjuste('cantidad', { required: true, valueAsNumber: true })}
                                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
-                                    >
-                                        <option value="">Seleccionar</option>
-                                        <option value="DETERIORADO">Deteriorado</option>
-                                        <option value="VENCIDO">Vencido</option>
-                                        <option value="USO_INTERNO">Uso Interno</option>
-                                        <option value="ROBO">Robo</option>
-                                        <option value="OTRO">Otro</option>
-                                    </select>
+                                        placeholder="Ej: 5"
+                                    />
                                 </div>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Motivo del Ajuste *
+                                </label>
+                                <select
+                                    {...registerAjuste('motivo_ajuste', { required: true })}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none"
+                                >
+                                    <option value="">Seleccionar</option>
+                                    <option value="DETERIORADO">Deteriorado</option>
+                                    <option value="VENCIDO">Vencido</option>
+                                    <option value="USO_INTERNO">Uso Interno</option>
+                                    <option value="ROBO">Robo</option>
+                                    <option value="OTRO">Otro</option>
+                                </select>
                             </div>
 
                             <button

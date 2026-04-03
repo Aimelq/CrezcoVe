@@ -32,6 +32,7 @@ export interface Producto {
     costo_referencia?: number; // Costo de Reposición (max of avg and last purchase)
     margen_deseado: number;
     tiene_vencimiento: boolean;
+    permite_decimales: boolean;
     dias_vencimiento?: number;
     alerta_stock_bajo_notificada: boolean;
     imagen_url?: string;

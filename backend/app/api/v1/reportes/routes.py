@@ -10,7 +10,7 @@ from flask_restx import Namespace, Resource
 from flask_jwt_extended import jwt_required
 from sqlalchemy import func
 from app.core.extensions import db
-from app.models import Producto, MovimientoInventario, Alerta
+from app.models import Producto, MovimientoInventario, Alerta, Usuario
 from app.services.prediccion_agotamiento import ServicioPrediccion
 
 # Crear namespace

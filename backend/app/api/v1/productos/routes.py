@@ -28,6 +28,7 @@ modelo_producto = productos_ns.model('Producto', {
     'precio_venta': fields.Float(required=True, description='Precio de venta'),
     'margen_deseado': fields.Float(description='Margen deseado (%)', default=30),
     'tiene_vencimiento': fields.Boolean(description='Tiene fecha de vencimiento'),
+    'permite_decimales': fields.Boolean(description='Permite cantidades fraccionadas (ej. Kilos)'),
     'imagen_url': fields.String(description='URL de imagen'),
     'notas': fields.String(description='Notas adicionales'),
     'producto_padre_id': fields.Integer(description='ID del producto bulto/caja'),

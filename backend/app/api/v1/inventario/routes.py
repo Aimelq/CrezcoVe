@@ -16,6 +16,7 @@ from app.services.servicio_alertas import ServicioAlertas
 from app.services.dinero_dormido import ServicioDineroDormido
 from app.services.auditoria_ciega import ServicioAuditoriaCiega
 from app.services.tasa_cambio import TasaCambioServicio
+from app.services.servicio_lotes import ServicioLotes
 from app.middleware.audit_middleware import registrar_accion_auditoria
 
 # Crear namespace
@@ -117,6 +118,10 @@ class IngresoInventario(Resource):
         if not producto:
             inventario_ns.abort(404, 'Producto no encontrado')
             
+        # Validar decimales
+        if getattr(producto, 'permite_decimales', False) is False and not float(datos['cantidad']).is_integer():
+            inventario_ns.abort(400, f'El producto "{producto.nombre}" no permite cantidades fraccionadas.')
+            
         # Validar vencimiento para perecederos
         if producto.tiene_vencimiento:
             if not datos.get('fecha_vencimiento'):
@@ -148,12 +153,18 @@ class IngresoInventario(Resource):
             datos['costo_unitario']
         )
         
-        # Crear o actualizar lote si se proporciona
+        # Crear o actualizar lote si se proporciona o si es perecedero autogenerarlo
         lote_id = None
-        if datos.get('numero_lote'):
+        numero_lote = datos.get('numero_lote')
+        
+        # SI el producto tiene vencimiento y NO enviaron lote de fábrica, autogeneramos
+        if not numero_lote and producto.tiene_vencimiento and datos.get('fecha_vencimiento'):
+            numero_lote = ServicioLotes.autogenerar_numero_lote()
+
+        if numero_lote:
             lote = LoteProducto.query.filter_by(
                 producto_id=datos['producto_id'],
-                numero_lote=datos['numero_lote']
+                numero_lote=numero_lote
             ).first()
             
             if lote:
@@ -164,7 +175,7 @@ class IngresoInventario(Resource):
             else:
                 lote = LoteProducto(
                     producto_id=datos['producto_id'],
-                    numero_lote=datos['numero_lote'],
+                    numero_lote=numero_lote,
                     fecha_vencimiento=datos.get('fecha_vencimiento'),
                     cantidad_inicial=datos['cantidad'],
                     cantidad_actual=datos['cantidad'],
@@ -237,6 +248,10 @@ class SalidaInventario(Resource):
         producto = Producto.query.get(datos['producto_id'])
         if not producto:
             inventario_ns.abort(404, 'Producto no encontrado')
+            
+        # Validar decimales
+        if getattr(producto, 'permite_decimales', False) is False and not float(datos['cantidad']).is_integer():
+            inventario_ns.abort(400, f'El producto "{producto.nombre}" no permite cantidades fraccionadas.')
         
         # Validar stock disponible
         if producto.cantidad_actual < datos['cantidad']:
@@ -252,6 +267,9 @@ class SalidaInventario(Resource):
         # Actualizar stock
         cantidad_anterior = producto.cantidad_actual
         producto.cantidad_actual -= datos['cantidad']
+        
+        # Descuento Inteligente de Lotes (FEFO/FIFO)
+        ServicioLotes.descontar_lotes_estrategicos(producto.id, datos['cantidad'])
         
         # Crear movimiento
         movimiento = MovimientoInventario(
@@ -314,6 +332,11 @@ class VentaMultiple(Resource):
                 if not producto:
                     continue
                 
+                # Validar decimales
+                if getattr(producto, 'permite_decimales', False) is False and not float(item['cantidad']).is_integer():
+                    db.session.rollback()
+                    inventario_ns.abort(400, f'El producto "{producto.nombre}" no permite cantidades fraccionadas.')
+                
                 # Validar stock
                 if producto.cantidad_actual < item['cantidad']:
                     db.session.rollback()
@@ -329,6 +352,9 @@ class VentaMultiple(Resource):
                 # Actualizar stock
                 cantidad_anterior = producto.cantidad_actual
                 producto.cantidad_actual -= item['cantidad']
+                
+                # Descuento de Lotes Inteligente (FEFO/FIFO)
+                ServicioLotes.descontar_lotes_estrategicos(producto.id, item['cantidad'])
                 
                 # Crear movimiento
                 movimiento = MovimientoInventario(
@@ -389,9 +415,17 @@ class AjusteInventario(Resource):
         producto = Producto.query.get(datos['producto_id'])
         if not producto:
             inventario_ns.abort(404, 'Producto no encontrado')
+            
+        # Validar decimales
+        if getattr(producto, 'permite_decimales', False) is False and not float(datos['cantidad']).is_integer():
+            inventario_ns.abort(400, f'El producto "{producto.nombre}" no permite cantidades fraccionadas.')
         
         cantidad_anterior = producto.cantidad_actual
         producto.cantidad_actual += datos['cantidad']  # Puede ser positivo o negativo
+        
+        # Descuento inteligente de lotes si estamos sacando inventario (merma)
+        if datos['cantidad'] < 0:
+            ServicioLotes.descontar_lotes_estrategicos(producto.id, abs(datos['cantidad']))
         
         # Validar que no quede negativo
         if producto.cantidad_actual < 0:
@@ -552,6 +586,10 @@ class DesempacarInventario(Resource):
         producto_padre = producto_hijo.padre
         factor = producto_hijo.factor_conversion or 1.0
         
+        # Validar decimales al desempacar (¿estoy desempacando media caja?)
+        if getattr(producto_padre, 'permite_decimales', False) is False and not float(cantidad_a_desempacar).is_integer():
+            inventario_ns.abort(400, f'El producto padre "{producto_padre.nombre}" no se puede fraccionar (solo números enteros).')
+        
         # Validar stock del padre
         if producto_padre.cantidad_actual < cantidad_a_desempacar:
             inventario_ns.abort(400, f'Stock insuficiente de {producto_padre.nombre}. Disponible: {producto_padre.cantidad_actual} {producto_padre.unidad_medida}')
@@ -560,6 +598,16 @@ class DesempacarInventario(Resource):
             # 1. Restar del padre (Salida por fraccionamiento)
             cant_anterior_padre = producto_padre.cantidad_actual
             producto_padre.cantidad_actual -= cantidad_a_desempacar
+            
+            # Descontar lote del padre (FEFO) para mantener control
+            lotes_padre_afectados = ServicioLotes.descontar_lotes_estrategicos(producto_padre.id, cantidad_a_desempacar)
+            
+            # Buscar el vencimiento del lote de caja sacrificado
+            fecha_vencimiento_padre = None
+            if lotes_padre_afectados:
+                lote_afectado = LoteProducto.query.get(lotes_padre_afectados[0]['lote_id'])
+                if lote_afectado:
+                    fecha_vencimiento_padre = lote_afectado.fecha_vencimiento
             
             mov_padre = MovimientoInventario(
                 producto_id=producto_padre.id,
@@ -572,7 +620,7 @@ class DesempacarInventario(Resource):
                 costo_unitario=producto_padre.costo_promedio,
                 costo_total=cantidad_a_desempacar * float(producto_padre.costo_promedio),
                 notas=f"Fraccionamiento: Convertido a {producto_hijo.nombre}",
-                    fecha_movimiento=datetime.now()
+                fecha_movimiento=datetime.now()
             )
             db.session.add(mov_padre)
             
@@ -585,6 +633,35 @@ class DesempacarInventario(Resource):
             costo_unitario_hijo = float(producto_padre.costo_promedio) / factor if factor > 0 else 0
             producto_hijo.costo_promedio = costo_unitario_hijo
             
+            # 3. Herencia de Lote para el hijo
+            lote_hijo_id = None
+            if lotes_padre_afectados:
+                lote_padre_dict = lotes_padre_afectados[0]
+                numero_lote_hijo = f"{lote_padre_dict['numero_lote']}-UNID"
+                
+                lote_hijo = LoteProducto.query.filter_by(
+                    producto_id=producto_hijo.id,
+                    numero_lote=numero_lote_hijo
+                ).first()
+                
+                if lote_hijo:
+                    lote_hijo.cantidad_actual += cantidad_hijo_nueva
+                    lote_hijo.cantidad_inicial += cantidad_hijo_nueva
+                else:
+                    lote_hijo = LoteProducto(
+                        producto_id=producto_hijo.id,
+                        numero_lote=numero_lote_hijo,
+                        fecha_vencimiento=fecha_vencimiento_padre,
+                        cantidad_inicial=cantidad_hijo_nueva,
+                        cantidad_actual=cantidad_hijo_nueva,
+                        costo_lote=costo_unitario_hijo,
+                        notas=f"Desempacado automáticamente del lote {lote_padre_dict['numero_lote']}"
+                    )
+                    db.session.add(lote_hijo)
+                
+                db.session.flush()
+                lote_hijo_id = lote_hijo.id
+
             mov_hijo = MovimientoInventario(
                 producto_id=producto_hijo.id,
                 usuario_id=usuario_id,
@@ -596,7 +673,8 @@ class DesempacarInventario(Resource):
                 costo_unitario=costo_unitario_hijo,
                 costo_total=cantidad_hijo_nueva * costo_unitario_hijo,
                 notas=f"Fraccionamiento: Desempacado de {producto_padre.nombre}",
-                fecha_movimiento=datetime.utcnow()
+                fecha_movimiento=datetime.utcnow(),
+                lote_id=lote_hijo_id
             )
             db.session.add(mov_hijo)
             

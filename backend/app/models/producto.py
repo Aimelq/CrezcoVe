@@ -32,8 +32,9 @@ class Producto(ModeloBase):
     precio_venta = db.Column(db.Numeric(10, 2), nullable=False, default=0.0)
     margen_deseado = db.Column(db.Float, nullable=False, default=30.0)  # Porcentaje
     
-    # Control de vencimiento
+    # Control de vencimiento y decimales
     tiene_vencimiento = db.Column(db.Boolean, nullable=False, default=False)
+    permite_decimales = db.Column(db.Boolean, nullable=False, default=False)
     dias_vencimiento = db.Column(db.Integer, nullable=True)  # Días típicos de vida útil
     
     # Alertas
@@ -82,6 +83,7 @@ class Producto(ModeloBase):
         data['costo_promedio'] = float(self.costo_promedio)
         data['ultimo_costo_compra'] = float(self.ultimo_costo_compra) if self.ultimo_costo_compra else None
         data['precio_venta'] = float(self.precio_venta)
+        data['permite_decimales'] = self.permite_decimales
         
         # Costo de Referencia (Reposición): Prioriza el último costo para decisiones de precio
         costo_avg = float(self.costo_promedio)
