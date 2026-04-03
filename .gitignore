@@ -1,7 +1,5 @@
 # Archivos de entornoS
-.env
-.env.local
-.env.production
+
 
 # Python
 __pycache__/
