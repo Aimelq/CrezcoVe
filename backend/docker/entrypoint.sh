@@ -4,9 +4,9 @@ set -e
 echo "🚀 Iniciando aplicación Flask..."
 
 # Esperar a que PostgreSQL esté listo
-echo "⏳ Esperando a PostgreSQL..."
-while ! pg_isready -h postgres -U usuario_inventario > /dev/null 2>&1; do
-    sleep 1
+echo "⏳ Esperando a PostgreSQL en ${DB_HOST:-postgres}:${DB_PORT:-5432}..."
+while ! pg_isready -h "${DB_HOST:-postgres}" -p "${DB_PORT:-5432}" -U "${DB_USER:-usuario_inventario}" > /dev/null 2>&1; do
+    sleep 2
 done
 echo "✅ PostgreSQL está listo"
 

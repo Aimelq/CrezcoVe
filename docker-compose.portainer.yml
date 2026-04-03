@@ -1,0 +1,156 @@
+services:
+  # Redis para caché y colas
+  redis:
+    image: redis:7-alpine
+    container_name: crezco_redis
+    command: redis-server --appendonly yes
+    volumes:
+      - crezco_redis_data:/data
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+  # Backend Flask
+  backend:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    container_name: crezco_backend
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      FLASK_ENV: production
+      FLASK_APP: "app:create_app()"
+      N8N_WEBHOOK_URL: http://n8n:5678/webhook
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID_DUENO: ${TELEGRAM_CHAT_ID_DUENO}
+      TELEGRAM_CHAT_ID_EMPLEADOS: ${TELEGRAM_CHAT_ID_EMPLEADOS}
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+      TZ: America/Caracas
+    volumes:
+      - crezco_uploads:/app/uploads
+    ports:
+      - "5010:5000"
+    depends_on:
+      - redis
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+  # Celery Worker para tareas asíncronas
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    container_name: crezco_celery_worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      FLASK_APP: "app:create_app()"
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID_DUENO: ${TELEGRAM_CHAT_ID_DUENO}
+      TELEGRAM_CHAT_ID_EMPLEADOS: ${TELEGRAM_CHAT_ID_EMPLEADOS}
+      TZ: America/Caracas
+    volumes:
+      - crezco_uploads:/app/uploads
+    depends_on:
+      - redis
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+  # Celery Beat para tareas programadas
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile
+    container_name: crezco_celery_beat
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      REDIS_URL: redis://redis:6379/0
+      TZ: America/Caracas
+    depends_on:
+      - redis
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+  # Frontend React (producción con nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: crezco_frontend
+    ports:
+      - "3010:80"
+    depends_on:
+      - backend
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+  # n8n para automatizaciones
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: crezco_n8n
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://${N8N_HOST:-localhost}:5688/
+      GENERIC_TIMEZONE: America/Caracas
+      TZ: America/Caracas
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: ${DB_HOST}
+      DB_POSTGRESDB_PORT: ${DB_PORT}
+      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME:-crezco_n8n}
+      DB_POSTGRESDB_USER: ${DB_USER}
+      DB_POSTGRESDB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - crezco_n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows
+    ports:
+      - "5688:5678"
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+  # Bot de Telegram
+  telegram_bot:
+    build:
+      context: ./backend
+      dockerfile: docker/Dockerfile.telegram
+    container_name: crezco_telegram_bot
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID_DUENO: ${TELEGRAM_CHAT_ID_DUENO}
+      TELEGRAM_CHAT_IDS_EMPLEADOS: ${TELEGRAM_CHAT_ID_EMPLEADOS}
+      TZ: America/Caracas
+    volumes:
+      - crezco_uploads:/app/uploads
+    depends_on:
+      - backend
+    networks:
+      - crezco_network
+    restart: unless-stopped
+
+volumes:
+  crezco_redis_data:
+    driver: local
+  crezco_n8n_data:
+    driver: local
+  crezco_uploads:
+    driver: local
+
+networks:
+  crezco_network:
+    driver: bridge
