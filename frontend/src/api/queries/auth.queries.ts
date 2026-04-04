@@ -13,14 +13,14 @@ export const useLogin = () => {
     const setAuth = useAuthStore((state) => state.setAuth);
 
     return useMutation({
-        mutationFn: async (data: LoginRequest) => {
-            const response = await apiClient.post<AuthResponse>('/auth/login', data, {
+        mutationFn: async (data: LoginRequest): Promise<AuthResponse> => {
+            const response = await apiClient.post('/auth/login', data, {
                 // @ts-ignore - suppressToast es una propiedad custom
                 suppressToast: true
             });
-            return response.data;
+            return response.data as AuthResponse;
         },
-        onSuccess: (data) => {
+        onSuccess: (data: AuthResponse) => {
             setAuth(data.usuario, data.access_token, data.refresh_token);
             toast.success(`¡Bienvenido, ${data.usuario.nombre_completo}!`);
             navigate('/dashboard');
