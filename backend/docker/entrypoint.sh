@@ -4,11 +4,21 @@ set -e
 echo "🚀 Iniciando aplicación Flask..."
 
 # Esperar a que PostgreSQL esté listo
-echo "⏳ Esperando a PostgreSQL..."
-while ! pg_isready -h postgres -U usuario_inventario > /dev/null 2>&1; do
-    sleep 1
+echo "⏳ Intentando conectar a la base de datos en ${DB_HOST:-postgres}:${DB_PORT:-5432}..."
+max_intentos=30
+contador=0
+
+while ! pg_isready -h "${DB_HOST:-postgres}" -p "${DB_PORT:-5432}" -U "${DB_USER:-usuario_inventario}" > /dev/null 2>&1; do
+    contador=$((contador+1))
+    if [ $contador -gt $max_intentos ]; then
+        echo "❌ ERROR: No se pudo conectar a la base de datos después de ${max_intentos} intentos."
+        echo "⚠️  Verifica que la base de datos en ${DB_HOST} sea accesible desde este contenedor."
+        exit 1
+    fi
+    echo "⏳ [Intento $contador/$max_intentos] Esperando a PostgreSQL..."
+    sleep 2
 done
-echo "✅ PostgreSQL está listo"
+echo "✅ PostgreSQL está listo. Procediendo..."
 
 # Ejecutar migraciones
 echo "🔄 Ejecutando migraciones de base de datos..."

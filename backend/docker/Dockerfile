@@ -34,7 +34,7 @@ EXPOSE 5000
 # Script de inicio
 COPY docker/entrypoint.sh /entrypoint.sh
 USER root
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && sed -i 's/\r$//' /entrypoint.sh
 USER usuario_app
 
 ENTRYPOINT ["/entrypoint.sh"]

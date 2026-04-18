@@ -56,8 +56,8 @@ export default function ProveedoresPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-semibold text-gray-900">{proveedor.nombre}</h3>
-                                        {proveedor.ruc && (
-                                            <p className="text-xs text-gray-500">RUC: {proveedor.ruc}</p>
+                                        {proveedor.rif && (
+                                            <p className="text-xs text-gray-500">RIF: {proveedor.rif}</p>
                                         )}
                                     </div>
                                 </div>
